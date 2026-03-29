@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Background */
+  --bg-primary: #0A0A0A;
+  --bg-secondary: #141414;
+  --bg-surface: #1A1A1A;
+  --bg-elevated: #242424;
+
+  /* Text */
+  --text-primary: #F5F0E8;
+  --text-secondary: #A09888;
+  --text-tertiary: #6B6156;
+
+  /* Accent */
+  --accent-warm: #D4A574;
+  --accent-cream: #F0E6D3;
+  --accent-ink: #2C1810;
+
+  /* Interactive */
+  --interactive-primary: #7B9EBF;
+  --interactive-hover: #9BB8D4;
+
+  /* Animation */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-micro: 300ms;
+  --duration-state: 800ms;
+  --duration-ceremony: 1200ms;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Pretendard', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Scrollbar — minimal, warm */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: 2px;
+}
+
+/* Selection — warm accent */
+::selection {
+  background: rgba(212, 165, 116, 0.3);
+  color: var(--text-primary);
+}
+
+/* Touch target minimum */
+@media (pointer: coarse) {
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
