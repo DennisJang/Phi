@@ -2,7 +2,7 @@
 
 > Read this FIRST at the start of every new conversation.
 > Updated at the end of each working session by Claude.
-> Last updated: 2026-04-08
+> Last updated: 2026-04-08 (session 2)
 
 ---
 
@@ -32,36 +32,41 @@
 - [x] **`/bookshelf` route** with minimal retreating UI chrome
 - [x] **Landing page "Enter the shelf" link** added
 - [x] **Verified locally**: book renders correctly in Codespaces dev server, all angles confirmed closed geometry
+- [x] **`useCoverTexture` hook** — loads image URL as THREE.Texture with sRGB colorspace, anisotropy 8, automatic dispose on unmount/URL change, race-condition-safe via cancelled flag
+- [x] **Front cover UV mapping** — BookModel now accepts `coverImageUrl` prop; textured front face uses white base color to prevent preset tinting; other 3 faces unchanged on preset materials
+- [x] **Verified locally on Codespaces** — Picsum test URL (1024x1536) loads and renders sharp; color accurate (sRGB working); texture isolated to front face only; no CORS or dispose warnings
+- [x] **Committed to `feat/p1-cover-uv-mapping` branch** — Vercel preview deploy triggered
 
 ## Phase 1 Gate progress (6 steps)
 
 - [x] Step 1: R3F Canvas mounted with lighting
 - [x] Step 2: Book-like procedural geometry
 - [x] Step 3: PBR materials
-- [ ] Step 4: Cover UV mapping (image texture on front face)
+- [x] Step 4: Cover UV mapping (image texture on front face)
 - [ ] Step 5: Book open/close ceremony animation
 - [ ] Step 6: Aladin API integration for real book metadata
 
 ## Next task queue
 
-1. **Cover UV mapping** — Load an image URL as a THREE.Texture, apply to front cover mesh only (other faces keep preset material). Handle loading/error states.
-2. **Cover texture caching** — Once UV mapping works, route texture loads through a centralized cache to avoid re-downloading when switching between books.
-3. **Book open animation** — Cover rotates around spine hinge axis (0° → ~160°), ceremony speed 800ms, ease-out curve from design tokens. Page block reacts with subtle fan.
-4. **Aladin API integration** — Server action or route handler that takes ISBN/query, returns {title, author, coverImageUrl}. Cache responses.
-5. **Wire Aladin cover URL into UV mapper** — Close the loop: real book → real cover on 3D model.
+1. **iPad Safari 실기 검증 (deferred until device available)** — Preview URL on iPad, confirm 60 FPS, cover sharpness at oblique angles, touch gesture compatibility with OrbitControls.
+2. **Texture cache centralization (Step 4.5)** — Add module-level `Map<string, Texture>` inside `useCoverTexture.ts` so identical URLs don't trigger duplicate network requests when multiple books share a cover. ~10 min.
+3. **Book open animation (Step 5)** — Front cover rotates around spine hinge axis (0° → ~160°) over 800ms, ease-out from design tokens. Page block fans subtly. Use @react-spring/three or framer-motion-3d — evaluate which is lighter before adding.
+4. **Aladin API integration (Step 6)** — Server action or route handler: ISBN/query → {title, author, coverImageUrl}. Cache responses in Supabase. Likely needs cover proxy due to CORS (see Known issues).
+5. **Wire Aladin cover URL into useCoverTexture** — Closes the Phase 1 gate loop: real book metadata → real cover on 3D model.
 
-## Performance baseline (measured 2026-04-08)
+## Performance baseline (measured 2026-04-08, session 2)
 
-Scene complexity: 1 book (4 meshes, 86 triangles, 8 draw calls)
+Scene complexity: 1 book with cover texture (4 meshes, 86 triangles, ~8 draw calls, 16 textures incl. environment map mipmaps)
 
 | Environment | FPS | CPU frame | GPU frame | Notes |
 |---|---|---|---|---|
-| Desktop Chrome, no throttling | ~60 | ~3.3ms | ~3.0ms | Healthy headroom |
-| DevTools iPad Air viewport, CPU 4x slowdown | ~30 | ~18ms | ~5.8ms | Stress simulation only |
+| Desktop Chrome, no throttling | ~60 | ~3.3ms | ~3.0ms | Pre-texture baseline |
+| Codespaces forwarded port + DevTools open + perf overlay | ~43 | ~2.3ms | ~5.6ms | Throttled by remote rendering, not representative of native |
+| DevTools iPad Air viewport, CPU 4x slowdown | ~30 | ~18ms | ~5.8ms | Worst-case stress simulation |
 
-- Desktop 60fps with 13ms CPU headroom suggests real iPad Air (M1) will comfortably hit 60fps
-- CPU 4x throttling is more severe than actual iPad Air; treat as worst-case, not target
-- Real iPad testing still required at Phase 1 gate closure
+- Codespaces measurement is UNRELIABLE for iPad prediction — port forwarding adds frame pacing overhead, DevTools Network recording adds CPU load.
+- Real iPad testing is the only valid Phase 1 gate check.
+- Texture count jump (4 → 16) after HDR envmap fully loaded is expected behavior: `apartment` preset expands into prefiltered cubemap mipmaps.
 
 ## Known issues
 
@@ -70,6 +75,10 @@ Scene complexity: 1 book (4 meshes, 86 triangles, 8 draw calls)
 - No PWA icons yet (icon-192.png, icon-512.png referenced in manifest but not created) — defer to Phase 4
 - `npm audit` reports 1 high severity vulnerability in Next 14.2.35 (DoS via Image Optimizer, HTTP smuggling in rewrites). Fix requires Next 16 breaking change. **Deferred to Phase 1 gate closure** to avoid mid-phase framework upgrade risk.
 - Case-sensitivity gotcha: file was initially created as `BookShelfScene.tsx` (capital S), renamed to `BookshelfScene.tsx`. Linux/Vercel builds are case-sensitive, Windows/Mac are not — always match imports exactly.
+- **Cover aspect ratio mismatch**: Front cover mesh is 1.4:2.0 (0.70), typical book cover image is 2:3 (0.667). Covers with centered text/logos may appear subtly stretched. Deferred until Step 6 — resolve via `texture.repeat`/`offset` for center-crop, or adjust BOOK_WIDTH/HEIGHT constants to 2:3. Picsum landscape test images mask the issue.
+- **Aladin image CORS (anticipated)**: `image.aladin.co.kr` may not send `Access-Control-Allow-Origin: *`. If confirmed in Step 6, three options: (a) Next.js `/api/cover-proxy` route, (b) Supabase Storage cache-on-first-fetch, (c) Next Image Optimizer via `next.config.js` remotePatterns. Option (c) is lowest effort.
+- **Material preset vs cover texture semantics**: `leather` and `glass` presets currently accept `coverImageUrl` but visually conflict with the texture. Consider restricting cover textures to `hardcover`/`paperback` only, or documenting the limitation. Deferred to post-gate.
+
 
 ## Environment notes
 
