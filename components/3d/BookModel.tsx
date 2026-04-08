@@ -21,7 +21,6 @@
  * All meshes are positioned so the spine sits on the X=0 plane,
  * which gives us a clean hinge axis for the open animation later.
  */
-
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import {
@@ -29,6 +28,7 @@ import {
   PAGE_BLOCK_MATERIAL,
   type MaterialPresetName,
 } from '@/lib/three/materials';
+import { useCoverTexture } from '@/lib/three/useCoverTexture';
 
 // Standard hardcover novel proportions (roughly 1.4 : 2.0 : 0.25 in world units)
 const BOOK_WIDTH = 1.4;
@@ -47,6 +47,8 @@ function useBoxGeometry(width: number, height: number, depth: number) {
 export interface BookModelProps {
   /** Material preset for the cover. Page block is always paper-toned. */
   preset?: MaterialPresetName;
+  /** Optional cover art URL. When provided, UV-mapped onto the front cover only. */
+  coverImageUrl?: string;
   /** Position of the book group in world space. */
   position?: [number, number, number];
   /** Rotation (euler) of the book group in world space. */
@@ -55,11 +57,14 @@ export interface BookModelProps {
 
 export function BookModel({
   preset = 'hardcover',
+  coverImageUrl,
   position = [0, 0, 0],
   rotation = [0, 0, 0],
 }: BookModelProps) {
   const coverMat = MATERIAL_PRESETS[preset];
+  const { texture: coverTexture } = useCoverTexture(coverImageUrl);
 
+  // ... rest unchanged until the front cover mesh
   // Geometries — memoized so React reuses them across renders
   const frontCoverGeo = useBoxGeometry(BOOK_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
   const backCoverGeo = useBoxGeometry(BOOK_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
@@ -80,14 +85,21 @@ export function BookModel({
 
   return (
     <group position={position} rotation={rotation}>
-      {/* Front cover — top face of closed book */}
+      {/* Front cover — top face of closed book.
+      When a cover image is loaded, color must be white so the texture
+      isn't tinted by the preset's base color. */}
       <mesh
         geometry={frontCoverGeo}
         position={[halfW, 0, halfT - COVER_THICKNESS / 2]}
         castShadow
         receiveShadow
       >
-        <meshStandardMaterial {...coverMat} />
+        <meshStandardMaterial
+          roughness={coverMat.roughness}
+          metalness={coverMat.metalness}
+          color={coverTexture ? '#ffffff' : coverMat.color}
+          map={coverTexture ?? undefined}
+        />
       </mesh>
 
       {/* Back cover — bottom face */}

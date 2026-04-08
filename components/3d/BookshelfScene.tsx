@@ -69,7 +69,10 @@ export function BookshelfScene() {
       </Suspense>
 
       {/* The hero object */}
-      <BookModel preset="hardcover" />
+      <BookModel
+        preset="hardcover"
+        coverImageUrl="https://picsum.photos/seed/phi-book-1/1024/1536"
+      />
 
       {/* Ground plane to receive shadows — invisible but catches shadow */}
       <mesh
