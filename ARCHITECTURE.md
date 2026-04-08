@@ -27,6 +27,7 @@ phi/
 │   │   └── server.ts            # Server Supabase client (cookies)
 │   └── three/
 │       └── materials.ts         # PBR material presets (4 covers + page block)
+│       └── useCoverTexture.ts   # Hook: load image URL as THREE.Texture (sRGB, disposal)
 ├── public/
 │   └── manifest.json            # PWA manifest
 ├── .gitignore
@@ -45,16 +46,24 @@ phi/
 | Home | `app/page.tsx` | Server | Landing page, link to `/bookshelf` |
 | BookshelfPage | `app/(features)/bookshelf/page.tsx` | Server | Route wrapper for 3D scene |
 | BookshelfScene | `components/3d/BookshelfScene.tsx` | Client | R3F Canvas, lights, env, controls |
-| BookModel | `components/3d/BookModel.tsx` | Client | Procedural book (4 meshes) |
+| BookModel | `components/3d/BookModel.tsx` | Client | Procedural book (4 meshes), front face UV-mapped from optional coverImageUrl |
 | PerfPanel | `components/3d/PerfPanel.tsx` | Client | Dev-only FPS/drawcall overlay |
 
-## 3D asset / material registry
+## 3D asset / material / hook registry
 
-| Asset | Path | Purpose |
+| Asset/Hook | Path | Purpose |
 |---|---|---|
 | MATERIAL_PRESETS | `lib/three/materials.ts` | PBR configs: hardcover, paperback, leather, glass |
 | PAGE_BLOCK_MATERIAL | `lib/three/materials.ts` | Aged paper material for page mesh |
 | BOOK_DIMENSIONS | `components/3d/BookModel.tsx` | Exported constants for shelf layout math |
+| useCoverTexture | `lib/three/useCoverTexture.ts` | Loads image URL as THREE.Texture with sRGB, anisotropy, auto-dispose |
+
+## Hooks registry
+
+| Hook | Path | Purpose |
+|---|---|---|
+| useCoverTexture | `lib/three/useCoverTexture.ts` | Loads image URL as THREE.Texture with sRGB, anisotropy, auto-dispose |
+
 
 ## Routes
 
