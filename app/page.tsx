@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-md">
@@ -24,16 +26,13 @@ export default function Home() {
           Your Digital Bookshelf
         </p>
 
-        {/* Status pill */}
-        <div
-          className="mt-lg px-lg py-sm rounded-full text-sm font-sans"
-          style={{
-            border: '1px solid var(--text-tertiary)',
-            color: 'var(--text-tertiary)',
-          }}
+        {/* Enter link — retreating, warms on hover */}
+        <Link
+          href="/bookshelf"
+          className="mt-lg px-lg py-sm rounded-full text-sm font-sans tracking-[0.2em] uppercase border border-text-tertiary text-text-tertiary hover:border-accent-warm hover:text-accent-warm transition-colors duration-micro"
         >
-          Phase 1 — Foundation
-        </div>
+          Enter the shelf
+        </Link>
       </div>
     </main>
   );
