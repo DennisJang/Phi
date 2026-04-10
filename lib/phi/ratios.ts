@@ -49,3 +49,19 @@ export const DURATION_MS = {
  * cubic-bezier(1/φ² − 0.0001, 0, 1/φ, 1)
  */
 export const PHI_EASING = 'cubic-bezier(0.382, 0, 0.618, 1)' as const;
+
+/**
+ * Shelf view camera yaw angle.
+ *
+ * Horizontal offset of the camera from straight-on spine view. At 0° the
+ * camera looks at the spine face dead-on (title reads flat); at this
+ * value the camera is rotated around the book's vertical axis so that
+ * the spine remains dominant but the front cover edge is visible as a
+ * sliver — the Stripe Press 3/4 silhouette.
+ *
+ * Pitch is intentionally 0: the camera stays level, so the book's top
+ * and bottom faces are never visible. Only yaw introduces perspective.
+ *
+ * 15° chosen by visual calibration, not φ-derived.
+ */
+export const SHELF_YAW_RAD = (15 * Math.PI) / 180; // 0.2618 rad
