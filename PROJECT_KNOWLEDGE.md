@@ -591,7 +591,10 @@ phi/
 | 2026-04-10 | bgCanvas shifted from #0A0A0A to #1A1612 (warm very-dark) | Stripe Press's warm brown background insight — books should feel held, not isolated. Cold pure-black reads as void; warm dark reads as atmosphere. |
 | 2026-04-10 | Shelf view camera: yaw 15°, pitch 0° (no φ derivation) | Visual calibration, not φ-derived. User spec: spine dominant, front cover edge as sliver, no top/bottom faces visible. Pitch must stay 0 to preserve spine's vertical silhouette — any pitch introduces trapezoidal distortion. |
 | 2026-04-10 | Phi System Tailwind binding: single source of truth via import | `tailwind.config.ts` imports PHI_DARK/DURATION_MS/PHI_EASING/SPACING_PX directly from `lib/phi/`. No hardcoded design token in Tailwind config. CSS variables in `globals.css` removed entirely; pseudo-elements use `@apply`. |
-
+| 2026-04-10 | 5개 legacy Storage 버킷 (uploads/photos/thumbnails/notes/share-cards) 삭제, `covers`만 유지 | 모두 비어있어 손실 없음. 폐기된 photographer 생태계 + LLM note 기능 잔재. 7개 legacy RLS 정책도 함께 드롭하고 단일 `covers_public_read` 정책으로 교체. |
+| 2026-04-10 | Cover proxy: 인-라우트 캐시 없음 (pure transformer) | supabase-js `list()`가 user metadata를 반환하지 않아 캐시 hit 시 dominantColor를 복구할 수 없음. 호출자(`books` 테이블)가 진짜 캐시 역할. 단순함이 정확함을 이김. |
+| 2026-04-10 | colorthief 제거, sharp 단독 네 모서리 dominant color 추출로 전환 | colorthief v2의 Buffer 입력 경로가 Node 환경에서 런타임 실패. 책 커버는 배경이 가장자리에 위치하는 디자인 구조라 MMCQ보다 4-corner 평균이 오히려 본질에 더 부합. 외부 의존성 1개 감소. |
+| 2026-04-10 | Cover proxy: 호출자가 `books.cover_image_url` + `cover_dominant_color`에 결과를 영구 저장하는 책임을 진다 | proxy는 image transformation 서비스, DB 쓰기는 별도 관심사. 명확한 separation of concerns. 같은 source URL → SHA-1 → 동일한 storage path → upsert로 idempotent 보장. |
 ---
 
 ## 10. Development Workflow Rules
@@ -988,3 +991,4 @@ Every editor PR must answer these four questions in its description.
 - Phone version is NOT a scaled-down tablet
 - When Phase 4 closes, decide whether to start phone as independent redesign
 - Until then, phone users see "Phi is tablet-only for now" message
+
