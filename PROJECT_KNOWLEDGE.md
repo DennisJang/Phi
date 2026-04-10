@@ -85,7 +85,7 @@ These two are not competing — they are two faces of the same philosophy: *one 
 ### 3.5 Color tokens (Phi Dark)
 ```css
 /* Background */
---bg-canvas: #0A0A0A;
+--bg-canvas: #1A1612;  /* warm very-dark, Stripe Press-inspired */
 --bg-surface: #141414;
 --bg-elevated: #1A1A1A;
 --bg-overlay: #242424;
@@ -587,7 +587,10 @@ phi/
 | 2026-04-10 | No payment processing ever | Revenue only from affiliates → Phi → 10% donation. Users never pay. |
 | 2026-04-10 | Constrained Creativity as viral engine | "Same constraints, different results" — consistency builds trust and fanbase |
 | 2026-04-10 | Non-replication principle | No template-copy feature; observe → inspire → recreate is the learning loop |
-| 2026-04-10 | Phi System (golden ratio) applied across 5 layers | Object, layout, typography, interaction, brand — all bound by φ |
+| 2026-04-10 | Phi System (golden ratio) applied across 5 layers | Object, layout, typography, interaction, brand — all bound by φ 
+| 2026-04-10 | bgCanvas shifted from #0A0A0A to #1A1612 (warm very-dark) | Stripe Press's warm brown background insight — books should feel held, not isolated. Cold pure-black reads as void; warm dark reads as atmosphere. |
+| 2026-04-10 | Shelf view camera: yaw 15°, pitch 0° (no φ derivation) | Visual calibration, not φ-derived. User spec: spine dominant, front cover edge as sliver, no top/bottom faces visible. Pitch must stay 0 to preserve spine's vertical silhouette — any pitch introduces trapezoidal distortion. |
+| 2026-04-10 | Phi System Tailwind binding: single source of truth via import | `tailwind.config.ts` imports PHI_DARK/DURATION_MS/PHI_EASING/SPACING_PX directly from `lib/phi/`. No hardcoded design token in Tailwind config. CSS variables in `globals.css` removed entirely; pseudo-elements use `@apply`. |
 
 ---
 
