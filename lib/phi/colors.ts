@@ -11,7 +11,7 @@
 
 export const PHI_DARK = {
   // Background
-  bgCanvas: '#0A0A0A',
+  bgCanvas: '#1A1612',
   bgSurface: '#141414',
   bgElevated: '#1A1A1A',
   bgOverlay: '#242424',
