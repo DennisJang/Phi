@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchRemoteImage } from '@/lib/image/fetchRemoteImage';
-import { processImage } from '@/lib/image/dominantColor';
+import { processImage } from '@/lib/image/processImage';
 import { hashImageUrl } from '@/lib/image/hash';
 
 /**
