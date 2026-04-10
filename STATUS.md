@@ -2,87 +2,136 @@
 
 > Read this FIRST at the start of every new conversation.
 > Updated at the end of each working session by Claude.
-> Last updated: 2026-04-08
+> Last updated: 2026-04-10
 
 ---
 
 ## Current position
 
-- **Phase**: 1 — Foundation + 3D Core
-- **Week**: 1 (Day 2)
-- **Gate target**: 3D book renders on iPad Safari, cover UV-mapped, book opens/closes
+- **Phase**: 1 — 3D Object Fidelity
+- **Week**: 1 (Day 2 → entering major redesign)
+- **Gate target**: Cover auto-mapping from 3 sources + auto spine + Phi System coded + Aladin minimal + manual add minimal + iPad landscape 60fps
 
-## Last completed
+## Major pivot completed 2026-04-10
+
+The project underwent a comprehensive redesign session that changed multiple core decisions. The old plan (pure MD Vinyl, book opening animation, LLM editing, paid subscription) has been replaced. All new decisions are logged in PROJECT_KNOWLEDGE.md §9. Key changes:
+
+- Design language: MD Vinyl (object only) + Stripe Press (layout)
+- Platform: tablet landscape only, phone deferred
+- Languages: ko + en only
+- Shelf model: single main shelf with section labels (not multiple playlists)
+- Privacy: private by default, follower counts hidden permanently
+- Shares: abstracted signals to others ("loved" / "spreading" / "widely loved")
+- Cover pipeline: 3 sources (Aladin, upload, typographic generation), dominant color letterbox
+- Spine: always auto-generated (author · title · Φ)
+- Book open animation: abandoned (was Step 5)
+- Editing: template mode + canvas block editor (Phase 3), NO LLM
+- Payment: removed entirely, free forever
+- Revenue: affiliate only, 10% donated
+- Philosophy: Constrained Creativity as viral engine
+
+## Last completed (carried over from old Phase 1)
 
 - [x] Project planning and architecture design
-- [x] Instagram API verification → BLOCKED, switched to direct upload model
 - [x] Tech stack locked: Next.js + R3F + Supabase + Vercel + Capacitor
-- [x] Custom Instructions + Project Knowledge created
 - [x] Supabase "Phi" project created (Tokyo, trbeccbsjnxdkzxlecvv)
-- [x] DB schema applied: 7 tables + RLS + indexes + triggers
+- [x] Old DB schema applied: 7 tables + RLS + indexes + triggers
+  - ⚠️ schema will be significantly modified in upcoming migration
 - [x] Storage buckets: 6 buckets with RLS policies
-- [x] GitHub repo DennisJang/Phi — boilerplate pushed
-- [x] Vercel deployment successful: https://phi-xi-eight.vercel.app
-- [x] Landing page live: dark canvas + Φ logo
-- [x] **R3F + Three.js stack installed** (three, @react-three/fiber, @react-three/drei, zustand, r3f-perf)
-- [x] **PBR material presets** (hardcover/paperback/leather/glass + page block)
-- [x] **Procedural BookModel** — 4 meshes (front cover, back cover, spine, page block), origin at spine hinge axis
-- [x] **BookshelfScene** — warm key light, cool rim light, hemisphere fill, apartment environment map, shadow catcher plane
-- [x] **PerfPanel** — dev-only r3f-perf wrapper, tree-shaken in production
-- [x] **`/bookshelf` route** with minimal retreating UI chrome
-- [x] **Landing page "Enter the shelf" link** added
-- [x] **Verified locally**: book renders correctly in Codespaces dev server, all angles confirmed closed geometry
+- [x] GitHub repo DennisJang/Phi
+- [x] Vercel deployment: https://phi-xi-eight.vercel.app
+- [x] R3F + Three.js stack installed
+- [x] PBR material presets
+- [x] Procedural BookModel (4 meshes, spine-hinge origin)
+- [x] BookshelfScene with lighting + environment + shadow catcher
+- [x] PerfPanel dev-only
+- [x] `/bookshelf` route rendering book at 60fps on desktop
+- [x] Step 4 (cover UV mapping) initial version
 
-## Phase 1 Gate progress (6 steps)
+## Phase 1 Gate progress (new definition)
 
-- [x] Step 1: R3F Canvas mounted with lighting
-- [x] Step 2: Book-like procedural geometry
-- [x] Step 3: PBR materials
-- [ ] Step 4: Cover UV mapping (image texture on front face)
-- [ ] Step 5: Book open/close ceremony animation
-- [ ] Step 6: Aladin API integration for real book metadata
+- [x] **Step 1**: R3F Canvas + lighting (done)
+- [x] **Step 2**: Procedural book geometry (done)
+- [x] **Step 3**: PBR materials (done)
+- [ ] **Step 4**: Cover mapping pipeline — THREE SOURCES
+  - [x] 4a: URL → Texture loading (done, legacy)
+  - [ ] 4b: `/api/cover-proxy` + dominant color extraction (server-side)
+  - [ ] 4c: User upload → Supabase Storage → texture pipeline
+  - [ ] 4d: Typographic generation fallback (canvas-based)
+  - [ ] 4e: Letterbox compositor (offscreen canvas)
+  - [ ] 4f: All three sources produce consistent 3D output
+- [ ] ~~**Step 5**: Book open animation~~ **ABANDONED 2026-04-10** — app's core is ownership + display, not opening ceremony. Do NOT reimplement.
+- [ ] **Step 5** (new): Auto spine generation (author · title · Φ)
+  - [ ] 5a: Canvas-based spine texture generator
+  - [ ] 5b: Font loading (serif for title, sans for author)
+  - [ ] 5c: Apply to spine mesh, verify readable at shelf distance
+- [ ] **Step 6**: Aladin API minimal integration
+  - [ ] 6a: Route handler `/api/aladin/search?q={query}`
+  - [ ] 6b: Returns multiple editions (ISBNs) for user selection
+  - [ ] 6c: Proxy selected cover URL through cover pipeline
+- [ ] **Step 7**: Manual book add flow
+  - [ ] 7a: Form for title/author/ISBN/cover upload
+  - [ ] 7b: Falls back to typographic generation if no cover uploaded
+- [ ] **Step 8**: Phi System (§17) codified
+  - [ ] 8a: `lib/phi/ratios.ts`
+  - [ ] 8b: `lib/phi/typography.ts`
+  - [ ] 8c: `lib/phi/colors.ts` (Dark palette only for Phase 1)
+  - [ ] 8d: `lib/phi/spacing.ts`
+  - [ ] 8e: `lib/phi/constraints.ts` (types only, no editor yet)
+- [ ] **Step 9**: Landscape orientation enforcement
+  - [ ] 9a: Portrait-mode rotation overlay
+  - [ ] 9b: Viewport meta configuration
+- [ ] **Step 10**: Real iPad test
+  - [ ] 10a: Measure FPS on actual device (owner needs physical iPad)
+  - [ ] 10b: If < 60fps, optimize before gate closure
 
-## Next task queue
+## Immediate next tasks (order matters)
 
-1. **Cover UV mapping** — Load an image URL as a THREE.Texture, apply to front cover mesh only (other faces keep preset material). Handle loading/error states.
-2. **Cover texture caching** — Once UV mapping works, route texture loads through a centralized cache to avoid re-downloading when switching between books.
-3. **Book open animation** — Cover rotates around spine hinge axis (0° → ~160°), ceremony speed 800ms, ease-out curve from design tokens. Page block reacts with subtle fan.
-4. **Aladin API integration** — Server action or route handler that takes ISBN/query, returns {title, author, coverImageUrl}. Cache responses.
-5. **Wire Aladin cover URL into UV mapper** — Close the loop: real book → real cover on 3D model.
+1. **Apply database migration** — drop deprecated tables/columns, create new schema (follows, saved_books, book_pages, notifications, donation_records, profiles updates)
+2. **Create `lib/phi/` directory** — ratios, typography, colors (dark), spacing, constraints
+3. **Rebuild `/bookshelf` for landscape** — rotate camera for horizontal viewing, add landscape enforcement overlay
+4. **Cover pipeline Step 4b** — start with `/api/cover-proxy` route handler + dominant color extraction using sharp
+5. **Typographic cover generator** — canvas-based, becomes the fallback for all flows
 
-## Performance baseline (measured 2026-04-08)
+## Performance baseline (measured 2026-04-08, before redesign)
 
-Scene complexity: 1 book (4 meshes, 86 triangles, 8 draw calls)
+Scene: 1 book, 4 meshes, 86 triangles, 8 draw calls
 
-| Environment | FPS | CPU frame | GPU frame | Notes |
-|---|---|---|---|---|
-| Desktop Chrome, no throttling | ~60 | ~3.3ms | ~3.0ms | Healthy headroom |
-| DevTools iPad Air viewport, CPU 4x slowdown | ~30 | ~18ms | ~5.8ms | Stress simulation only |
+| Environment | FPS | CPU frame | GPU frame |
+|---|---|---|---|
+| Desktop Chrome, no throttling | ~60 | ~3.3ms | ~3.0ms |
+| DevTools iPad Air viewport, CPU 4x slow | ~30 | ~18ms | ~5.8ms |
 
-- Desktop 60fps with 13ms CPU headroom suggests real iPad Air (M1) will comfortably hit 60fps
-- CPU 4x throttling is more severe than actual iPad Air; treat as worst-case, not target
-- Real iPad testing still required at Phase 1 gate closure
+Baseline will be re-measured after landscape rewrite and cover pipeline completion.
 
-## Known issues
+## Known issues (carried over)
 
-- Tailwind v3 vs v4: package.json initially had v4, corrected to v3 for PostCSS compatibility
-- VS Code shows `@tailwind` unknown rule warning — cosmetic only, no build impact
-- No PWA icons yet (icon-192.png, icon-512.png referenced in manifest but not created) — defer to Phase 4
-- `npm audit` reports 1 high severity vulnerability in Next 14.2.35 (DoS via Image Optimizer, HTTP smuggling in rewrites). Fix requires Next 16 breaking change. **Deferred to Phase 1 gate closure** to avoid mid-phase framework upgrade risk.
-- Case-sensitivity gotcha: file was initially created as `BookShelfScene.tsx` (capital S), renamed to `BookshelfScene.tsx`. Linux/Vercel builds are case-sensitive, Windows/Mac are not — always match imports exactly.
+- **Next.js 14.2.35 audit vulnerability** — deferred to Phase 1 gate closure, known DoS + HTTP smuggling
+- **No PWA icons yet** — defer to Phase 4
+- **VS Code `@tailwind` rule warning** — cosmetic, no build impact
+- **Case-sensitivity gotcha** — always match import casing exactly (Linux/Vercel)
+
+## Known issues (new)
+
+- **`subscription_tier` column in old `profiles` schema** — must be dropped in next migration
+- **Old `share_cards` and `photographer_photos` tables** — must be dropped, no longer in plan
+- **Current `/bookshelf` scene is camera-portrait-ish** — must be rebuilt for landscape-first viewing
+- **No i18n structure yet** — not critical for Phase 1, but all new UI strings should go into a `constants/strings.ts` temporary bucket ready for extraction
 
 ## Environment notes
 
-- Supabase anon key + URL set in Vercel env vars (all environments)
-- service_role key NOT yet added (needed when server actions are implemented)
-- Auth providers not yet configured (Google/Apple OAuth — deferred to Week 2)
-- Dev environment: GitHub Codespaces (Linux, case-sensitive filesystem)
-- No iPad / Galaxy Tab yet — testing via Chrome DevTools Device Mode only
+- **Dev**: GitHub Codespaces, Linux, case-sensitive
+- **Supabase**: anon key + URL in Vercel env vars; service_role NOT yet added (needed when cover proxy is implemented — add before Step 4b)
+- **Auth providers**: not configured yet, OK for Phase 1 (no auth), add Google OAuth at Phase 2 start
+- **Real iPad**: still not acquired — owner needs to confirm purchase timeline. Phase 1 gate cannot fully close without it.
+- **Aladin TTB key**: owner needs to register at aladin.co.kr (needed for Step 6 — register before that step)
 
 ## Decisions pending
 
-- Serif font loading: Cormorant Garamond via next/font or self-hosted?
-- Test devices: Owner needs to confirm iPad model + Galaxy Tab model
-- Aladin API key: Owner needs to register at aladin.co.kr (needed Week 3)
-- **Custom domain**: safehomepro.co.kr is owned but name mismatch with Phi brand. Decision: defer domain to Phase 4 when brand naming is finalized; consider dedicated brand domain (e.g., phi.app, readphi.com) at that point.
-- **Next.js upgrade path**: Stay on 14.2.35 through Phase 1, upgrade at gate closure to address audit vulnerabilities.
+- **Real iPad acquisition** — blocks final Phase 1 gate verification
+- **Aladin TTB key registration** — blocks Step 6
+- **Custom domain** — safehomepro.co.kr owned but name mismatch. Defer to Phase 4. Consider phi-specific domain.
+- **Donation recipient organization** — Phase 4 decision
+- **Kakao Login integration** — Phase 3 decision (convenience for Korean users, custom OAuth complexity)
+- **Font loading strategy** — Cormorant Garamond (serif) + Pretendard (sans-serif) via next/font or self-hosted? Decide at Step 5 (spine typography) when it first matters.
+- **Logo and copy finalization** — deferred. Current Φ mark is provisional; detailed brand work happens after Phase 1 gate.
