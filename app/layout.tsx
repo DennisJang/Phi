@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { LandscapeGuard } from '@/components/ui/LandscapeGuard';
+import { AnonymousBootstrap } from '@/components/auth/AnonymousBootstrap';
 import './globals.css';
 
 const inter = Inter({
@@ -36,7 +37,9 @@ export default function RootLayout({
   return (
     <html lang="ko" className={inter.variable}>
       <body className="bg-canvas text-text-primary font-sans antialiased">
-        <LandscapeGuard>{children}</LandscapeGuard>
+        <AnonymousBootstrap>
+          <LandscapeGuard>{children}</LandscapeGuard>
+        </AnonymousBootstrap>
       </body>
     </html>
   );

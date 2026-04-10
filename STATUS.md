@@ -2,19 +2,19 @@
 
 > Read this FIRST at the start of every new conversation.
 > Updated at the end of each working session by Claude.
-> Last updated: 2026-04-10 (post Step 4b: cover proxy)
+> Last updated: 2026-04-10 (post Step 4c: user upload pipeline)
 
 ---
 
 ## Current position
 
 - **Phase**: 1 — 3D Object Fidelity
-- **Week**: 1 (Day 2, four PRs merged into main today)
+- **Week**: 1 (Day 2, five PRs merged into main today)
 - **Gate target**: Cover auto-mapping from 3 sources + auto spine + Phi System coded + Aladin minimal + manual add minimal + iPad landscape 60fps
 
 ## Sessions completed today (2026-04-10)
 
-Four feature branches were merged to main in one working day:
+Five feature branches merged to main in one working day:
 
 1. **feat/p1-phi-system** — codified the Phi System under `lib/phi/`
    (ratios, typography, colors, spacing, blocks, constraints). Six files,
@@ -34,6 +34,17 @@ Four feature branches were merged to main in one working day:
    color via four-corner pixel sampling, and uploads to the Supabase
    `covers` bucket. Pure transformer, no in-route caching. Tested
    end-to-end against an Aladin HTTPS cover URL on Vercel production.
+
+5. **feat/p1-cover-upload** — `/api/cover-upload` route for authenticated
+   user file uploads. Reuses `processImage()` from 4b. Introduces
+   Supabase anonymous sign-in as the Phase 1 identity layer, with an
+   in-flight-deduped `ensureAnonymousSession()` helper and an
+   `AnonymousBootstrap` client component mounted in the root layout.
+   Storage writes go through the cookie-bound server client so RLS
+   enforces `covers/{user_id}/{sha1}.webp` isolation. End-to-end
+   verified via `/dev/upload` scratch form: success path, idempotency,
+   413 (too large), 422 (MIME lie caught by sharp), and cross-user
+   folder isolation.
 
 ## Last completed (carried over from old Phase 1)
 
@@ -57,8 +68,8 @@ Four feature branches were merged to main in one working day:
 - [x] **Step 3**: PBR materials (done)
 - [ ] **Step 4**: Cover mapping pipeline — THREE SOURCES
   - [x] 4a: URL → Texture loading (done, legacy)
-  - [x] **4b**: `/api/cover-proxy` + dominant color extraction **(DONE 2026-04-10)**
-  - [ ] 4c: User upload → Supabase Storage → texture pipeline
+  - [x] **4b**: `/api/cover-proxy` + dominant color extraction (done 2026-04-10)
+  - [x] **4c**: User upload → Supabase Storage → texture pipeline **(DONE 2026-04-10)**
   - [ ] 4d: Typographic generation fallback (canvas-based)
   - [ ] 4e: Letterbox compositor (offscreen canvas)
   - [ ] 4f: All three sources produce consistent 3D output
@@ -96,16 +107,15 @@ Four feature branches were merged to main in one working day:
    - Pure server-side canvas (`@napi-rs/canvas` or similar) — verify Vercel compat
    - Renders title (serif, center) + author (sans, bottom) on dominant color background
    - Golden-ratio layout with generous margins
-   - Returns same `{ url, dominantColor, width, height }` shape as cover-proxy
-2. **Step 4c** — User upload path → Supabase Storage → texture pipeline
-   - Authenticated upload policy on `covers` bucket (upload to `{user_id}/...` folder)
-   - Form with MIME + size validation client-side
-   - Pipes through same processing as cover-proxy (sharp, four-corner color)
-3. **Step 4e** — Letterbox compositor
+   - Returns same `{ url, dominantColor, width, height }` shape as cover-proxy / cover-upload
+2. **Step 4e** — Letterbox compositor
    - Takes processed cover + dominant color → composites on book front face
    - Visual verification of "cover melts into book surface" effect
-4. **Step 5** — Spine texture generator
-5. **Step 6** — Aladin API integration (requires TTB key registration first)
+   - First time 4b/4c output actually reaches the 3D scene
+   - Retire `/dev/upload` scratch form here (or at Step 7, whichever comes first)
+3. **Step 5** — Spine texture generator (reuses 4d's canvas library choice)
+4. **Step 6** — Aladin API integration (requires TTB key registration first)
+5. **Step 7** — Manual book add flow
 
 ## Performance baseline (measured 2026-04-10, after landscape rebuild)
 
@@ -121,15 +131,19 @@ Cover proxy round-trip (first call, no cache):
   - Fetch: ~530ms
   - sharp decode + corner sampling + WebP encode: ~250ms
   - Supabase Storage upload: ~120ms
-- Local Codespaces is comparable when network conditions allow
+
+Cover upload round-trip (Codespaces dev, 200-500 KB JPEG):
+- Local processing dominated by sharp: ~250-400ms
+- Storage upload: ~100-200ms
+- Total: ~500-700ms from POST to JSON response
 
 Baseline will be re-measured after spine generator (Step 5) and
 letterbox compositor (Step 4e) add more textures to the scene.
 
 ## Key learnings (kept short, used as future debugging tools)
 
-These joined the project's permanent toolkit during Step 4b. Each is
-phrased so it can be applied to a future situation that *looks
+These joined the project's permanent toolkit during Steps 4b and 4c.
+Each is phrased so it can be applied to a future situation that *looks
 unrelated* but shares the same shape.
 
 - **Step 3a's "one rotation axis at a time"** — when debugging 3D
@@ -173,6 +187,42 @@ unrelated* but shares the same shape.
   as the local code passes type-check; don't try to make every local
   edge case green before shipping.
 
+- **(NEW, Step 4c) Strict Mode is not the bug, undefended effects are**.
+  When useEffect kicks off a side effect that writes to a shared
+  resource (DB, server), a per-effect `cancelled` flag only blocks
+  React state updates — the in-flight network request still completes.
+  The correct defense is de-duplication at the call site: a
+  module-level in-flight promise that all callers await. This pattern
+  is also what protects against Suspense, streaming, concurrent mount,
+  and accidental double-invocation in production. Any future helper
+  that "should only happen once per browser session" needs this shape.
+
+- **(NEW, Step 4c) Next.js dev server does not always hot-reload new
+  API routes**. Adding `app/api/<x>/route.ts` sometimes requires a
+  full `npm run dev` restart for Next.js to register it. If a new
+  route returns 404 when the file clearly exists, suspect the dev
+  server state before suspecting the code.
+
+- **(NEW, Step 4c) The App Router's "one route.ts per directory" rule
+  is silent but absolute**. Placing a second `route.ts` in a directory
+  that already has one does not error — the second file is simply
+  ignored. When adding a new API route, always create a new directory.
+
+- **(NEW, Step 4c) Client Content-Type is never a security boundary**.
+  The shallow validation layer (declared MIME, declared size) is only
+  there to fail honest mistakes cheaply. The real boundary is whatever
+  actually decodes the bytes — sharp in our case. A `.txt` file with
+  `Content-Type: image/png` passed the shallow layer and was correctly
+  caught by sharp with `decode_failed`. Any future upload route must
+  rely on a decoder for security, not on headers.
+
+- **(NEW, Step 4c) RLS is the source of truth, not application code**.
+  Once the `covers_user_insert_own_folder` policy was in place, the
+  upload route did not need to verify `path startsWith user_id` in TS.
+  The policy enforces it at the database level. Re-implementing the
+  check in application code would just add a place for the two
+  definitions to drift.
+
 ## Known issues (carried over)
 
 - **Next.js 14.2.35 audit vulnerability** — deferred to Phase 1 gate
@@ -190,7 +240,7 @@ unrelated* but shares the same shape.
   copy. Phase 2 should change to "tap to open · swipe to browse" once
   gesture handlers replace OrbitControls.
 
-## Known issues (new from Step 4b)
+## Known issues (from Step 4b, still open)
 
 - **Next.js "Failed to generate cache key" warning** on every cover-proxy
   response. Harmless — Next.js's internal cache layer trying and failing
@@ -204,8 +254,6 @@ unrelated* but shares the same shape.
 - **`error.cause` (the underlying Node-level error) is not propagated**
   in cover-proxy responses. The route returns `{ kind, message }` but
   the deep TLS / DNS / certificate detail stays in server logs only.
-  Fine for production but worth surfacing during dev when debugging
-  upstream issues.
 - **SSRF defense is not in place** — cover-proxy will fetch any
   http(s) URL it is handed. Phase 1 is safe because URL sources are
   internal (Aladin/Google Books API responses), but Step 6 should add
@@ -214,8 +262,40 @@ unrelated* but shares the same shape.
 - **Codespaces TLS root CA gap** — `https://example.com` fetch fails
   in Codespaces with `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, while picsum
   / Aladin / Vercel all work fine. Local-only quirk; doesn't affect
-  production. If a future fetch starts failing locally, run
-  `sudo update-ca-certificates` before assuming a code bug.
+  production.
+
+## Known issues (new from Step 4c)
+
+- **`/dev/upload` is a scratch page, not a Phase 1 deliverable**.
+  It lives at `app/dev/upload/page.tsx` and will be deleted at the
+  Phase 1 gate, or replaced by the real BookAddDialog flow in Step 7 —
+  whichever comes first. Its styling is intentionally ugly (inline
+  styles, no Phi tokens) to discourage anyone from treating it as
+  real UI.
+- **Anonymous sign-in has no rate limit** — a malicious client can
+  mint many anonymous users by clearing cookies between requests.
+  Each `auth.users` row is cheap but not free. Phase 2 will add real
+  auth + Vercel edge rate limiting; Phase 1 accepts the risk because
+  the attack surface is dev-only.
+- **Anonymous user cleanup is not automated**. `auth.users` rows with
+  `is_anonymous = true` accumulate across dev sessions. Manual cleanup
+  during Step 4c debugging via MCP `delete from auth.users where
+  is_anonymous = true`. Phase 2 or before Phase 1 gate: add a
+  scheduled cleanup for stale anonymous users (e.g., >7 days old with
+  no linked identity).
+- **`getSession()` vs `getUser()` subtlety** — our server route uses
+  `getUser()` for verification (JWT signature checked), while client
+  code can use `getSession()` (local cookie parse). Future routes
+  must not confuse the two; decision to authorize must always come
+  from `getUser()`.
+- **Content-addressed storage has no garbage collection**. Each unique
+  `{user_id}/{sha1}.webp` stays forever. When Phase 2 adds book
+  deletion, dangling Storage objects will accumulate unless deletion
+  also removes the object. Track when implementing book deletion.
+- **`next.config.js` has a legacy `image.aladin.co.kr` remotePattern**
+  left over from Step 4a's direct-loading approach. Can be removed
+  during Phase 1 gate review now that the only client-facing cover
+  URLs are Supabase CDN.
 
 ## Environment notes
 
@@ -223,20 +303,23 @@ unrelated* but shares the same shape.
 - **Supabase**: anon key + URL + service_role key all set in Vercel env
   vars (production + preview + dev). Service role added 2026-04-10
   during Step 4b.
+- **Supabase Auth**: **anonymous sign-in enabled 2026-04-10** during
+  Step 4c (dashboard → Authentication → Providers → Anonymous).
 - **`.env.local` discipline**: copy values raw, never inside Markdown
   auto-link `<...>` brackets. The infection happened at least once and
   cost an hour of debugging.
-- **Auth providers**: not configured yet, OK for Phase 1 (no auth), add
-  Google OAuth at Phase 2 start
+- **Auth providers**: only anonymous sign-in active. Google OAuth +
+  email magic link planned for Phase 2 start. Anonymous identities
+  can be linked to real ones via `supabase.auth.linkIdentity()`.
 - **Real iPad**: still not acquired — owner needs to confirm purchase
   timeline. Phase 1 gate cannot fully close without it.
-- **Aladin TTB key**: owner needs to register at aladin.co.kr (needed
-  for Step 6 — register before that step)
+- **Aladin TTB key**: owner is in the process of registering at
+  aladin.co.kr (needed for Step 6).
 
 ## Decisions pending
 
 - **Real iPad acquisition** — blocks final Phase 1 gate verification
-- **Aladin TTB key registration** — blocks Step 6
+- **Aladin TTB key registration** — blocks Step 6 (in progress)
 - **Custom domain** — safehomepro.co.kr owned but name mismatch. Defer
   to Phase 4. Consider phi-specific domain.
 - **Donation recipient organization** — Phase 4 decision
@@ -246,5 +329,7 @@ unrelated* but shares the same shape.
 - **Server-side canvas library for Step 4d** — `@napi-rs/canvas`,
   `node-canvas`, or `@vercel/og`-style approach? Decide at Step 4d
   start. Verify Vercel compat first.
+- **Anonymous user cleanup strategy** — scheduled function vs manual
+  during Phase 1. Decide before Phase 1 gate.
 - **Logo and copy finalization** — deferred. Current Φ mark is
   provisional.

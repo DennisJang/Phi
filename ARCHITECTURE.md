@@ -1,7 +1,7 @@
 # Project Phi — Architecture
 
 > Auto-generated codebase map. Updated when features are added/changed.
-> Last updated: 2026-04-10 (post Step 4b: cover proxy)
+> Last updated: 2026-04-10 (post Step 4c: user upload pipeline)
 
 ---
 
@@ -10,15 +10,22 @@
 Phase 1 is past the halfway point. The Phi System (`lib/phi/`) is the
 single source of truth for all design tokens. The database is on the
 Phi 1.0 schema. The 3D scene renders in spine-on shelf view with
-portrait-mode orientation enforcement. The cover-processing pipeline
-(Step 4b) is live in production at `/api/cover-proxy`: it fetches a
-remote URL, decodes via sharp, samples a four-corner dominant color,
-WebP-encodes, and uploads to the `covers` bucket.
+portrait-mode orientation enforcement. Two of the three cover sources
+are live: `/api/cover-proxy` (Step 4b) for remote URLs and
+`/api/cover-upload` (Step 4c) for user-uploaded files. Both share the
+same `processImage()` sharp pipeline and return the same response
+shape, so downstream consumers can treat them as a single interface.
+
+Phase 1 introduces its first identity layer via Supabase anonymous
+sign-in. Every page load mints (or resumes) an anonymous auth.users
+row via `AnonymousBootstrap`, giving API routes a real `auth.uid()`
+to authorize against and allowing RLS to enforce
+`covers/{user_id}/...` isolation on uploads.
 
 What remains for the Phase 1 gate: typographic cover fallback (Step 4d),
-user-upload path (Step 4c), letterbox compositor (Step 4e), spine
-generator (Step 5), Aladin API integration (Step 6), manual add flow
-(Step 7), and real iPad FPS verification (Step 10).
+letterbox compositor (Step 4e), spine generator (Step 5), Aladin API
+integration (Step 6), manual add flow (Step 7), and real iPad FPS
+verification (Step 10).
 
 ---
 
@@ -33,46 +40,54 @@ phi/
 │   │   └── bookshelf/
 │   │       └── page.tsx                  # horizontal shelf route
 │   ├── api/
-│   │   └── cover-proxy/
-│   │       └── route.ts                  # NEW (Step 4b): cover processor
+│   │   ├── cover-proxy/
+│   │   │   └── route.ts                  # Step 4b: remote URL → cover
+│   │   └── cover-upload/                 # NEW (Step 4c)
+│   │       └── route.ts                  # user upload → cover
+│   ├── dev/                              # NEW (Step 4c)
+│   │   └── upload/
+│   │       └── page.tsx                  # scratch form, delete at gate
 │   ├── globals.css                       # @layer base resets only
-│   ├── layout.tsx                        # LandscapeGuard wrapper
+│   ├── layout.tsx                        # MODIFIED (Step 4c): + AnonymousBootstrap wrap
 │   └── page.tsx                          # landing
 ├── components/
 │   ├── 3d/
 │   │   ├── BookModel.tsx                 # procedural book geometry
 │   │   ├── BookshelfScene.tsx            # spine-on camera composition
 │   │   └── PerfPanel.tsx                 # dev-only FPS overlay
+│   ├── auth/                             # NEW (Step 4c)
+│   │   └── AnonymousBootstrap.tsx        # session bootstrap + Context
 │   └── ui/
 │       └── LandscapeGuard.tsx            # portrait unmount guard
 ├── lib/
-│   ├── image/                            # NEW (Step 4b)
-│   │   ├── hash.ts                       # SHA-1 cache key from URL
-│   │   ├── fetchRemoteImage.ts           # safe HTTP fetcher (validation)
-│   │   └── dominantColor.ts              # sharp four-corner sampler
+│   ├── image/
+│   │   ├── hash.ts                       # MODIFIED (Step 4c): + hashImageBytes
+│   │   ├── fetchRemoteImage.ts           # safe HTTP fetcher (4b)
+│   │   └── processImage.ts               # RENAMED from dominantColor.ts (Step 4c)
 │   ├── phi/                              # Phi System (single source of truth)
-│   │   ├── ratios.ts                     # φ constants + SHELF_YAW_RAD
-│   │   ├── typography.ts                 # 5 roles, 2 typefaces
-│   │   ├── colors.ts                     # PHI_DARK palette
-│   │   ├── spacing.ts                    # 3-step scale
-│   │   ├── blocks.ts                     # 7 block types + BookPageContent
-│   │   └── constraints.ts                # exhaustive editor manifest
+│   │   ├── ratios.ts
+│   │   ├── typography.ts
+│   │   ├── colors.ts
+│   │   ├── spacing.ts
+│   │   ├── blocks.ts
+│   │   └── constraints.ts
 │   ├── supabase/
-│   │   ├── client.ts                     # browser client (anon)
-│   │   ├── server.ts                     # server client (anon, cookie-based)
-│   │   └── admin.ts                      # NEW (Step 4b): service_role client
+│   │   ├── client.ts                     # MODIFIED (Step 4c): singleton + ensureAnonymousSession
+│   │   ├── server.ts                     # async createClient (cookie-based)
+│   │   └── admin.ts                      # service_role client (4b)
 │   └── three/
 │       ├── materials.ts
 │       └── useCoverTexture.ts
 ├── supabase/
 │   └── migrations/
 │       ├── 20260410_000000_phi_redesign.sql
-│       └── 20260410_120000_storage_policies_reset.sql   # NEW (Step 4b)
+│       ├── 20260410_120000_storage_policies_reset.sql   # Step 4b
+│       └── 20260410_140000_covers_user_upload_policies.sql  # NEW (Step 4c)
 ├── public/
 │   └── manifest.json
 ├── .gitignore
-├── next.config.js                        # MODIFIED (Step 4b): sharp external
-├── package.json                          # MODIFIED (Step 4b): + sharp
+├── next.config.js                        # sharp external (Step 4b)
+├── package.json                          # sharp dep (Step 4b)
 ├── postcss.config.js
 ├── tailwind.config.ts                    # imports from lib/phi/
 └── tsconfig.json
@@ -125,13 +140,15 @@ phi/
 
 | Component | Path | Type | Purpose |
 |---|---|---|---|
-| RootLayout | `app/layout.tsx` | Server | Dark canvas, font, PWA meta, LandscapeGuard wrap |
+| RootLayout | `app/layout.tsx` | Server | Dark canvas, font, PWA meta, AnonymousBootstrap + LandscapeGuard wrap |
 | Home | `app/page.tsx` | Server | Landing page with Φ mark and entry link |
 | BookshelfPage | `app/(features)/bookshelf/page.tsx` | Server | Shelf route wrapper with retreating chrome |
 | BookshelfScene | `components/3d/BookshelfScene.tsx` | Client | R3F Canvas with spine-on camera (15° yaw, 0° pitch) |
 | BookModel | `components/3d/BookModel.tsx` | Client | Procedural book (4 meshes, spine hinge origin) |
 | PerfPanel | `components/3d/PerfPanel.tsx` | Client | Dev-only FPS overlay (r3f-perf) |
 | LandscapeGuard | `components/ui/LandscapeGuard.tsx` | Client | Portrait-mode overlay, unmounts children entirely |
+| **AnonymousBootstrap** | `components/auth/AnonymousBootstrap.tsx` | Client | **Session bootstrap on first mount; exposes `useAnonymousSession()` Context to descendants** |
+| **DevUploadPage** | `app/dev/upload/page.tsx` | Client | **Scratch form for 4c verification; delete at Phase 1 gate** |
 
 ## Components registry (planned, Phase 1 target additions)
 
@@ -151,6 +168,7 @@ phi/
 |---|---|---|
 | `/` | Server | `app/page.tsx` — landing with Φ mark |
 | `/bookshelf` | Server | `app/(features)/bookshelf/page.tsx` — shelf view |
+| `/dev/upload` | Client | `app/dev/upload/page.tsx` — **scratch form, delete at gate** |
 
 ### Planned (Phase 1 target)
 | Path | Type | Purpose |
@@ -173,9 +191,10 @@ phi/
 ## API routes
 
 ### Current
-| Path | Method | Runtime | Purpose |
-|---|---|---|---|
-| `/api/cover-proxy` | GET | nodejs (forced) | Fetch a remote image URL, validate, sharp → WebP, four-corner dominant color, upload to `covers` bucket, return public URL + metadata |
+| Path | Method | Runtime | Auth | Purpose |
+|---|---|---|---|---|
+| `/api/cover-proxy` | GET | nodejs | none (public) | Fetch remote image URL, validate, sharp → WebP, four-corner dominant color, upload to `covers` bucket root via service_role, return public URL + metadata |
+| `/api/cover-upload` | POST | nodejs | **`getUser()` required** | Accept multipart file upload, validate, sharp → WebP, four-corner dominant color, upload to `covers/{user_id}/...` via cookie-bound client (RLS-enforced), return public URL + metadata |
 
 ### Planned (Phase 1)
 | Path | Method | Purpose |
@@ -190,18 +209,17 @@ phi/
 
 ---
 
-## Cover proxy contract (Step 4b)
+## Cover pipeline contracts
 
-```
-GET /api/cover-proxy?url={encoded-source-url}
-```
+Both `/api/cover-proxy` and `/api/cover-upload` return the same shape
+so downstream code can handle all sources uniformly.
 
 **Success (HTTP 200):**
 ```json
 {
   "ok": true,
   "data": {
-    "url": "https://...supabase.co/storage/v1/object/public/covers/{sha1}.webp",
+    "url": "https://...supabase.co/storage/v1/object/public/covers/...",
     "dominantColor": "#RRGGBB",
     "width": 500,
     "height": 593
@@ -214,34 +232,49 @@ GET /api/cover-proxy?url={encoded-source-url}
 { "ok": false, "error": { "kind": "...", "message": "..." } }
 ```
 
-**Error kinds and HTTP status mapping:**
+### `/api/cover-proxy` (Step 4b) — remote URL input
 
-| `kind`                  | HTTP | When                                                  |
-|-------------------------|------|-------------------------------------------------------|
-| `missing_url`           | 400  | `?url=` query parameter absent                        |
-| `invalid_url`           | 400  | `new URL()` throws                                    |
-| `invalid_scheme`        | 400  | URL is not http: or https:                            |
-| `invalid_content_type`  | 415  | Upstream returned non-image/* content                 |
-| `too_large`             | 413  | Upstream content > 5 MB                               |
-| `timeout`               | 504  | Fetch exceeded 10 s                                   |
-| `upstream_status`       | 502  | Upstream returned non-2xx HTTP status                 |
-| `network`               | 502  | DNS, TLS, connection, or other transport-level error  |
-| `decode_failed`         | 422  | sharp could not parse the image bytes                 |
-| `metadata_missing`      | 422  | sharp returned without width/height                   |
-| `color_extraction_failed` | 422 | corner sampling failed unexpectedly                   |
-| `encode_failed`         | 422  | sharp WebP conversion failed                          |
-| `storage_upload_failed` | 500  | Supabase Storage upload error                         |
+```
+GET /api/cover-proxy?url={encoded-source-url}
+```
 
-**Caller responsibility:** the route is a pure transformer. Callers
-must persist the returned `url`, `dominantColor`, `width`, `height` to
-their own `books` row. There is no in-route cache.
+Error kinds: `missing_url` (400), `invalid_url` (400), `invalid_scheme` (400),
+`invalid_content_type` (415), `too_large` (413), `timeout` (504),
+`upstream_status` (502), `network` (502), `decode_failed` (422),
+`metadata_missing` (422), `color_extraction_failed` (422),
+`encode_failed` (422), `storage_upload_failed` (500).
 
-**Idempotency:** the storage path is `{sha1(sourceUrl)}.webp`, and
-upload uses `upsert: true`. Same source URL → same key → same public
-URL → safe to retry.
+Storage path: `{sha1(sourceUrl)}.webp` at bucket root, written with
+service_role (RLS bypassed). Idempotent via upsert.
 
-**Cold start:** sharp adds ~250 ms to first invocation per Vercel
-serverless instance. Subsequent calls in the same container are fast.
+### `/api/cover-upload` (Step 4c) — user file input
+
+```
+POST /api/cover-upload
+Content-Type: multipart/form-data
+Body field: file
+```
+
+Error kinds: `unauthenticated` (401), `invalid_form_data` (400),
+`missing_file` (400), `empty_file` (400), `too_large` (413),
+`invalid_content_type` (415), `read_failed` (400), plus the full
+`processImage` error set (`decode_failed`, `metadata_missing`,
+`color_extraction_failed`, `encode_failed` — all 422),
+`storage_upload_failed` (500).
+
+Storage path: `{user_id}/{sha1(fileBytes)}.webp` under the uploader's
+folder, written via the cookie-bound server client so
+`covers_user_insert_own_folder` RLS enforces isolation. Idempotent
+via upsert.
+
+Validation is two-layered: shallow (declared MIME in allowlist,
+declared size ≤ 5MB) to fail honest mistakes cheaply, and deep
+(sharp decode via `processImage`) as the real security boundary.
+Client Content-Type is never trusted on its own.
+
+**Caller responsibility (both routes):** persist the returned `url`,
+`dominantColor`, `width`, `height` to the `books` row. No in-route
+cache.
 
 ---
 
@@ -258,13 +291,6 @@ serverless instance. Subsequent calls in the same container are fast.
 | Tailwind tokens | `tailwind.config.ts` | Done — imports PHI_DARK directly |
 | Phi Light palette | `lib/phi/colors.ts` | Not started (Phase 2) |
 
-**Token binding discipline**: `tailwind.config.ts` imports `PHI_DARK`,
-`DURATION_MS`, `PHI_EASING`, and `SPACING_PX` directly from `lib/phi/`.
-No design value is hardcoded in the Tailwind config. CSS variables in
-`globals.css` have been removed entirely; pseudo-element styles
-(`::selection`, `::-webkit-scrollbar-thumb`) use Tailwind's `@apply`
-directive to reference the same tokens.
-
 ---
 
 ## 3D pipeline status
@@ -275,51 +301,69 @@ directive to reference the same tokens.
 | PBR materials (4 presets) | `lib/three/materials.ts` | Done |
 | Lighting + environment | `components/3d/BookshelfScene.tsx` | Done |
 | Cover texture loading (legacy URL→Texture) | `lib/three/useCoverTexture.ts` | Done (Step 4a) |
-| Cover proxy + dominant color | `app/api/cover-proxy/route.ts` | **Done (Step 4b)** |
-| Safe remote fetcher | `lib/image/fetchRemoteImage.ts` | **Done (Step 4b)** |
-| Image processing (sharp + four-corner color) | `lib/image/dominantColor.ts` | **Done (Step 4b)** |
-| User upload pipeline | (Step 4c) | Not started |
+| Cover proxy + dominant color | `app/api/cover-proxy/route.ts` | Done (Step 4b) |
+| Safe remote fetcher | `lib/image/fetchRemoteImage.ts` | Done (Step 4b) |
+| Shared image processing | `lib/image/processImage.ts` | Done (Step 4b, renamed 4c) |
+| **User upload pipeline** | `app/api/cover-upload/route.ts` | **Done (Step 4c)** |
 | Typographic cover generator | (Step 4d) | Not started |
 | Letterbox compositor | (Step 4e) | Not started |
 | Spine generator | (Step 5) | Not started |
 
-**Scene composition (current)**: Book in base pose (no model-side
-rotation). Camera positioned on a horizontal arc around the book
-center at yaw = 15° (`SHELF_YAW_RAD`), pitch = 0°. This produces the
-Stripe Press 3/4 silhouette: spine dominant, front cover edge as a
-perspective sliver, top and bottom faces never visible. OrbitControls
-target is the book center `[BOOK_DIMENSIONS.width / 2, 0, 0]`, not the
-origin, so inspection drags rotate around the book center rather than
-the spine hinge.
+---
+
+## Identity & auth status
+
+| Layer | Status | Notes |
+|---|---|---|
+| Anonymous sign-in | **Done (Step 4c)** | Dashboard toggle + `ensureAnonymousSession()` helper + `AnonymousBootstrap` component |
+| Email magic link | Planned (Phase 2) | — |
+| Google OAuth | Planned (Phase 2) | — |
+| Apple Sign In | Planned (Phase 4) | Required for iOS App Store |
+| Username system | Planned (Phase 3) | — |
+| linkIdentity migration | Planned (Phase 2 start) | Links anonymous → real identity so Phase 1 data persists |
+
+**Session flow:**
+```
+Page load
+  ↓
+<AnonymousBootstrap> mounts (client, outside LandscapeGuard)
+  ↓
+ensureAnonymousSession():
+  - Returns cached result if tab already has one
+  - Returns in-flight promise if a call is already running
+  - Otherwise: getSession() → if none, signInAnonymously()
+  ↓
+auth.users row (is_anonymous=true) + JWT + cookie
+  ↓
+Context value { status: 'ready', userId, isAnonymous } exposed to tree
+  ↓
+Consumers read via useAnonymousSession() hook
+```
+
+**In-flight dedup rationale:** React Strict Mode (dev), Suspense, and
+streaming can invoke effects more than once before the first call
+resolves. Without dedup, each invocation would mint a separate
+anonymous user row. The module-level in-flight promise guarantees
+exactly one `signInAnonymously()` call per browser tab session.
 
 ---
 
-## Cover proxy pipeline (Step 4b)
+## Image pipeline (shared by 4b and 4c)
 
 ```
-GET /api/cover-proxy?url=...
+Input (URL or file bytes)
         │
         ▼
 ┌─────────────────────────┐
-│ route.ts                │  Orchestrator
-│ - Validate ?url=        │
-│ - Build cache key       │
-└─────────┬───────────────┘
-          │
-          ▼
-┌─────────────────────────┐
-│ fetchRemoteImage()      │  Safe HTTP fetch
-│ - URL parse + scheme    │
-│ - 10s timeout           │
-│ - Content-Type check    │
-│ - 5MB size cap          │
-│ → Buffer or tagged err  │
+│ fetchRemoteImage()  (4b)│
+│      OR                 │
+│ file.arrayBuffer()  (4c)│
 └─────────┬───────────────┘
           │ Buffer
           ▼
 ┌─────────────────────────┐
-│ processImage()          │  sharp pipeline
-│ - sharp.metadata()      │
+│ processImage()          │  Shared sharp pipeline
+│ - sharp.metadata()      │  (lib/image/processImage.ts)
 │ - resize 4×4 + raw      │
 │ - corner-pixel average  │
 │ - sharp.webp(quality:85)│
@@ -328,22 +372,21 @@ GET /api/cover-proxy?url=...
           │ {webpBuffer, dominantColor, width, height}
           ▼
 ┌─────────────────────────┐
-│ createAdminClient()     │  service_role Supabase
-│ .storage.upload()       │  upsert: true
-│   covers/{sha1}.webp    │  cacheControl: 1y
+│ Supabase Storage upload │
+│  4b: createAdminClient  │  → covers/{sha1(url)}.webp
+│      (service_role,     │     (RLS bypassed)
+│       RLS bypassed)     │
+│  4c: createServerClient │  → covers/{user_id}/{sha1(bytes)}.webp
+│      (cookie-bound,     │     (RLS enforced)
+│       RLS enforced)     │
 └─────────┬───────────────┘
           │
           ▼
-┌─────────────────────────┐
-│ getPublicUrl()          │
-│ → Return JSON           │
-└─────────────────────────┘
+   { url, dominantColor, width, height }
 ```
 
-**Pure functions, tagged error unions, no shared mutable state.** Each
-file has one job. Each function returns `{ ok: true, data } | { ok:
-false, error }`, never throws across module boundaries. Errors carry
-machine-readable `kind` for HTTP mapping.
+**Single shared transformer, two orchestrators.** The sharp pipeline
+is identical; only the input source and storage path strategy differ.
 
 ---
 
@@ -351,21 +394,32 @@ machine-readable `kind` for HTTP mapping.
 
 | Context | Module | Method | Use |
 |---|---|---|---|
-| Browser | `lib/supabase/client.ts` | `createBrowserClient()` | Future client-side queries |
-| Server (with cookies) | `lib/supabase/server.ts` | `createServerClient()` | Server Components, user-context queries |
-| **Admin (no cookies, full access)** | `lib/supabase/admin.ts` | `createAdminClient()` | API routes only — bypasses RLS |
+| Browser | `lib/supabase/client.ts` | `createClient()` (singleton) | Client components; `ensureAnonymousSession()` bootstrap |
+| Server (with cookies) | `lib/supabase/server.ts` | `createClient()` (async) | Server Components, user-context API routes (`/api/cover-upload`) |
+| Admin (no cookies, full access) | `lib/supabase/admin.ts` | `createAdminClient()` | Service_role-only API routes (`/api/cover-proxy`) |
 
 **Admin client discipline**: Never imported by any client-side or
-shared-render code. Used only inside `app/api/**/route.ts` files.
-Constructed per-request (factory, not singleton) to avoid worker-thread
-state leaks. `persistSession: false` to skip session machinery entirely.
+shared-render code. Used only inside routes that must bypass RLS.
+Constructed per-request (factory, not singleton). `persistSession: false`.
+
+**Browser client discipline**: Singleton since Step 4c. All client
+components must go through `createClient()` from `lib/supabase/client.ts`
+to share the same session state. Never construct `createBrowserClient`
+directly from component code.
+
+**Server client discipline**: `createClient()` in `lib/supabase/server.ts`
+is **async** (awaits `cookies()`). API routes must `await createClient()`
+before using it. For auth decisions, always use `supabase.auth.getUser()`
+(not `getSession()`) — `getUser()` verifies the JWT signature with
+Supabase, while `getSession()` only parses the local cookie.
 
 ---
 
 ## Database schema status
 
 **Status**: Phi 1.0 schema applied to Supabase dev project (2026-04-10).
-Storage policies reset 2026-04-10 (Step 4b).
+Storage policies reset 2026-04-10 (Step 4b). User upload policies
+added 2026-04-10 (Step 4c).
 
 ### Tables (current, applied)
 
@@ -379,35 +433,45 @@ Storage policies reset 2026-04-10 (Step 4b).
 | `notifications` | 0 | ✓ | Phase 3+ queue |
 | `donation_records` | 0 | ✓ | Phase 4 transparency ledger, publicly readable |
 
+### Auth
+
+- Supabase Auth **anonymous sign-in enabled** (2026-04-10, Step 4c)
+- `auth.users` rows with `is_anonymous = true` are created by
+  `ensureAnonymousSession()` from the browser client. RLS treats
+  them identically to real authenticated users.
+
 ### Storage buckets
 
 | Bucket | Public | Limit | MIME types | Notes |
 |---|---|---|---|---|
-| `covers` | ✓ | 5 MB | image/jpeg, image/png, image/webp | Created 2026-04-10. Single RLS policy: `covers_public_read`. Writes go via service_role from `/api/cover-proxy`. |
+| `covers` | ✓ | 5 MB | image/jpeg, image/png, image/webp | Two write paths coexist: (a) `{sha1}.webp` at bucket root via service_role from `/api/cover-proxy`; (b) `{user_id}/{sha1}.webp` via cookie-bound client from `/api/cover-upload`, RLS-enforced. |
 
-5 legacy buckets (`uploads`, `photos`, `thumbnails`, `notes`, `share-cards`)
-were removed during Step 4b cleanup along with their 7 RLS policies.
+### Storage RLS policies (covers bucket)
+
+| Policy | Command | Role | Predicate |
+|---|---|---|---|
+| `covers_public_read` | SELECT | public | always |
+| `covers_user_insert_own_folder` | INSERT | authenticated | `(storage.foldername(name))[1] = auth.uid()::text` |
+| `covers_user_update_own_folder` | UPDATE | authenticated | same (using + with check) |
+| `covers_user_delete_own_folder` | DELETE | authenticated | same |
+
+`service_role` bypasses all of the above, which is why `/api/cover-proxy`
+can continue writing `{sha1}.webp` at bucket root without matching
+any of the user-scoped policies.
 
 ### Server-side functions
 
 | Function | Purpose |
 |---|---|
-| `public.get_shelf_signal(uuid) → text` | SECURITY DEFINER. Returns abstracted signal (`loved` / `spreading` / `widely_loved` / null) instead of raw follower count. Anti-comparison enforced at query layer. Executable by anon and authenticated roles only. |
-
-### Indexes
-
-Eight `idx_*` indexes cover the expected query patterns:
-`idx_books_user`, `idx_books_shelf_order`, `idx_books_isbn` (partial
-where isbn is not null), `idx_book_pages_book`, `idx_follows_follower`,
-`idx_follows_following`, `idx_saved_books_user`,
-`idx_notifications_user_unread` (partial where read_at is null).
+| `public.get_shelf_signal(uuid) → text` | SECURITY DEFINER. Returns abstracted signal instead of raw follower count. |
 
 ### Migrations
 
 | File | Applied | Summary |
 |---|---|---|
 | `supabase/migrations/20260410_000000_phi_redesign.sql` | 2026-04-10 | Full redesign — drop 5 deprecated tables, reshape profiles and books, create 5 new tables, rewrite 12 RLS policies, add get_shelf_signal function, create 8 indexes |
-| `supabase/migrations/20260410_120000_storage_policies_reset.sql` | 2026-04-10 | Drop 7 legacy storage RLS policies, add `covers_public_read`. Note: legacy bucket DELETE is blocked by `storage.protect_delete()`; the buckets themselves were removed via the Supabase dashboard. |
+| `supabase/migrations/20260410_120000_storage_policies_reset.sql` | 2026-04-10 | Drop 7 legacy storage RLS policies, add `covers_public_read`. |
+| `supabase/migrations/20260410_140000_covers_user_upload_policies.sql` | 2026-04-10 | Add 3 storage RLS policies for user-scoped uploads: `covers_user_insert_own_folder`, `covers_user_update_own_folder`, `covers_user_delete_own_folder`. |
 
 ---
 
@@ -422,18 +486,14 @@ where isbn is not null), `idx_book_pages_book`, `idx_follows_follower`,
 - `@react-three/fiber@8.17.10`
 - `@react-three/drei@9.114.0`
 - `zustand@5.0.1`
-- **`sharp@^0.33`** (added Step 4b — server-side image processing)
+- `sharp@^0.33` (Step 4b, server-side image processing)
 
-### Dependencies removed
-- `colorthief@2.7.0` — installed and then uninstalled during Step 4b.
-  v2's Buffer-input path failed at runtime in our Node environment.
-  Replaced with sharp's four-corner sampling, which has zero extra
-  dependencies and matches book cover background structure.
+No new runtime dependencies added in Step 4c — reuses `@supabase/ssr`
+(already installed), `sharp` (already installed), and Node `crypto`.
 
 ### Dependencies to add (Phase 1 remaining)
-- A server-side canvas library for Step 4d (typographic cover generator).
-  Candidates: `@napi-rs/canvas`, `@vercel/og`, or `node-canvas`. Verify
-  Vercel serverless compat first.
+- A server-side canvas library for Step 4d. Candidates:
+  `@napi-rs/canvas`, `@vercel/og`, or `node-canvas`.
 
 ### Dependencies to add (Phase 2+)
 - `next-intl` — i18n (Phase 2)
@@ -449,13 +509,6 @@ where isbn is not null), `idx_book_pages_book`, `idx_follows_follower`,
 - `@types/node@25.5.0`
 - `r3f-perf@7.2.3`
 
-### `next.config.js` notes (Step 4b)
-
-`experimental.serverComponentsExternalPackages: ['sharp']` is required
-because sharp is a native binary that webpack cannot bundle. This tells
-Next.js to leave sharp imports as external `require()` calls resolved
-from `node_modules` at runtime.
-
 ---
 
 ## Infrastructure
@@ -470,6 +523,7 @@ from `node_modules` at runtime.
 
 - **Web (dev)**: https://phi-xi-eight.vercel.app
 - **Cover proxy** (dev): https://phi-xi-eight.vercel.app/api/cover-proxy
+- **Cover upload** (dev): https://phi-xi-eight.vercel.app/api/cover-upload
 - **Supabase API**: https://trbeccbsjnxdkzxlecvv.supabase.co
 - **Custom domain**: none (deferred to Phase 4)
 
@@ -485,36 +539,30 @@ from `node_modules` at runtime.
 - No i18n structure yet — `constants/strings.ts` temporary bucket
   should be introduced as new UI lands; full `next-intl` integration at
   Phase 2 start.
-- Auth not yet integrated — `/bookshelf` is currently anonymous, and
-  `/api/cover-proxy` has no caller authentication (Phase 1 acceptable
-  because the endpoint is public-by-design and pure-transform; revisit
-  in Phase 2 with rate limiting at the Vercel edge).
-- `OrbitControls` on `/bookshelf` is a Phase 1 dev convenience; Phase 2
-  replaces with gesture handlers for tablet-native interaction.
+- Auth: only anonymous sign-in active. Real auth + rate limiting
+  comes in Phase 2.
+- `OrbitControls` on `/bookshelf` is a Phase 1 dev convenience.
 - "drag to inspect · scroll to zoom" hint text on `/bookshelf` is
-  dev-era copy. Update to "tap to open · swipe to browse" when gesture
-  handlers replace OrbitControls.
+  dev-era copy.
 - `LandscapeGuard` bilingual copy is hardcoded — permanent exception
-  from the Phase 2 i18n system by design (brand statement: "Phi speaks
-  ko and en simultaneously").
-- No `types/` directory yet. `BookPageContent` and block types live in
-  `lib/phi/blocks.ts`, which is fine, but `types/book.ts` will be needed
-  at Step 6 (Aladin API response shape).
+  from the Phase 2 i18n system by design.
+- No `types/` directory yet. `types/book.ts` will be needed at
+  Step 6 (Aladin API response shape).
 - **Cover proxy: Next.js "Failed to generate cache key" warning**
-  fires on every response. Harmless. Investigate at Phase 1 gate
-  review.
-- **Cover proxy: HTTP 502 collapses two semantically different cases**
-  (DNS/TLS failure vs upstream HTTP 4xx). Acceptable for Phase 1.
-  Differentiate in Step 6 if Aladin search needs to distinguish
-  "image missing" from "network error".
-- **Cover proxy: `error.cause` is dropped from responses.** Server
-  logs preserve it; clients only see `kind` + short message. Surface
-  it in dev mode if Step 4c upload diagnostics need it.
+  fires on every response. Harmless.
+- **Cover proxy: HTTP 502 collapses two semantically different cases**.
+- **Cover proxy: `error.cause` is dropped from responses.**
 - **Cover proxy: SSRF undefended.** Phase 1 internal-source assumption
-  holds. Step 6 must add an allowlist of image CDN domains
-  (`image.aladin.co.kr`, `books.google.com`, etc.) before any
-  user-supplied URL can reach this route.
+  holds. Step 6 must add an allowlist before any user-supplied URL
+  can reach this route.
 - **`image.aladin.co.kr` remotePattern in `next.config.js`** is a
-  legacy from when client code loaded Aladin URLs directly. With the
-  new proxy pipeline, only the Supabase CDN hostname is needed on the
-  client. Remove during Phase 1 gate review.
+  legacy from Step 4a. Remove during Phase 1 gate review.
+- **(Step 4c) `/dev/upload` scratch page** must be deleted at the
+  Phase 1 gate or replaced by the real BookAddDialog flow.
+- **(Step 4c) Anonymous users have no cleanup strategy** — rows
+  accumulate. Add scheduled cleanup before Phase 1 gate.
+- **(Step 4c) Anonymous sign-in has no rate limit** — Phase 2 will
+  add edge rate limiting.
+- **(Step 4c) Content-addressed storage has no GC** — dangling
+  Storage objects will accumulate when Phase 2 adds book deletion.
+  Wire deletion to Storage removal at that time.

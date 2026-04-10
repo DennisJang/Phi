@@ -20,3 +20,20 @@ import { createHash } from 'node:crypto';
 export function hashImageUrl(url: string): string {
   return createHash('sha1').update(url, 'utf8').digest('hex');
 }
+
+/**
+ * Generates a deterministic cache key from raw image bytes.
+ *
+ * Used by /api/cover-upload to address user-uploaded files by
+ * content rather than URL (since uploads have no source URL).
+ *
+ * Same bytes -> same key -> same storage path -> upsert is
+ * idempotent. Different bytes -> different key -> no collision.
+ *
+ * Same SHA-1 rationale as hashImageUrl: this is a cache key, not a
+ * cryptographic commitment. The threat model is "user uploads the
+ * same file twice", not "adversary crafts collisions".
+ */
+export function hashImageBytes(bytes: Buffer): string {
+  return createHash('sha1').update(bytes).digest('hex');
+}
