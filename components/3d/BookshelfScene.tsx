@@ -76,13 +76,13 @@ export function BookshelfScene() {
       }}
       style={{ background: 'transparent' }}
     >
-      {/* Ambient hemisphere — warm sky, cooler ground. Soft fill. */}
-      <hemisphereLight args={['#F5E6D3', '#1a1410', 0.3]} />
+      {/* Ambient base — minimal, so normalMap detail survives */}
+      <hemisphereLight args={['#F5E6D3', '#1a1410', 0.15]} />
 
-      {/* Key light — warm white, top-right, casts shadows */}
+      {/* Key light — warm, lowered to y=2 for grazing angle on book faces */}
       <directionalLight
-        position={[5, 6, 3]}
-        intensity={2.5}
+        position={[4, 2, 3]}
+        intensity={2.8}
         color="#FFF4E6"
         castShadow
         shadow-mapSize-width={1024}
@@ -95,16 +95,30 @@ export function BookshelfScene() {
         shadow-camera-bottom={-5}
       />
 
-      {/* Subtle rim light from opposite side */}
+      {/* Grazing rim light — near-horizontal from +X side.
+          This light's ray hits the page block's fore-edge (+X normal)
+          and top/bottom faces at a shallow angle, revealing the
+          horizontal normalMap stripes. This is the Stripe Press effect:
+          grazing light dramatizes paper grain that normal light flattens. */}
       <directionalLight
-        position={[-3, 2, -2]}
-        intensity={0.4}
+        position={[6, 0.3, 0]}
+        intensity={1.6}
+        color="#FFE8CC"
+        castShadow={false}
+      />
+
+      {/* Cool fill from behind — keeps shadow side from going flat black */}
+      <directionalLight
+        position={[-3, 1, -2]}
+        intensity={0.3}
         color="#7B9EBF"
       />
 
-      {/* PBR environment — "apartment" is warm indoor lighting */}
+      {/* Environment — LOW intensity so directional lights dominate.
+          apartment preset is still useful for PBR reflections on the
+          cover, but must not wash out the normalMap. */}
       <Suspense fallback={null}>
-        <Environment preset="apartment" background={false} />
+        <Environment preset="apartment" background={false} environmentIntensity={0.25} />
       </Suspense>
 
       {/* The hero object in its base pose — no rotation applied */}
