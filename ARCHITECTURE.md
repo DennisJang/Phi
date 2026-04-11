@@ -32,6 +32,7 @@ phi/
 │   ├── api/
 │   │   ├── cover-proxy/route.ts            # Step 4b
 │   │   └── cover-upload/route.ts           # Step 4c
+│   │   └── cover-generate/route.ts         # Step 4d
 │   ├── dev/upload/page.tsx                 # scratch, delete at gate
 │   ├── globals.css
 │   ├── layout.tsx                          # AnonymousBootstrap + LandscapeGuard
@@ -65,6 +66,7 @@ phi/
 │       ├── bookDimensions.ts
 │       ├── coverPipeline.ts                # edge-28-pixel sampling (Step 4f)
 │       └── paperNormal.ts                  # procedural DataTexture (Step 4f)
+│       └── typographicCover.ts             # @napi-rs/canvas renderer (Step 4d)
 ├── supabase/migrations/                    # see PROJECT_KNOWLEDGE §4
 ├── public/manifest.json
 ├── next.config.js
@@ -72,7 +74,10 @@ phi/
 ├── postcss.config.js
 ├── tailwind.config.ts
 └── tsconfig.json
-
+├── assets/
+│   └── fonts/
+│       ├── NotoSerifKR-VF.ttf              # Step 4d, traced via outputFileTracingIncludes
+│       └── NotoSansKR-VF.ttf               # Step 4d
 ---
 
 ## Components registry
@@ -115,6 +120,7 @@ Contracts live in each route's JSDoc header. This table is the map.
 |---|---|---|---|
 | `/api/cover-proxy` | GET | none | Remote URL → sharp WebP → `covers/{sha1}.webp` via service_role |
 | `/api/cover-upload` | POST | `getUser()` | Multipart upload → sharp WebP → `covers/{user_id}/{sha1}.webp` via cookie-bound client (RLS enforced) |
+| `/api/cover-generate` | POST | `getUser()` | JSON `{title,author,language}` → @napi-rs/canvas PNG → sharp WebP → `covers/{user_id}/{sha1}.webp` (RLS enforced) |
 
 Both return `{ ok, data: { url, dominantColor, width, height } }` on
 success. Caller persists to `books` row.
@@ -137,8 +143,9 @@ success. Caller persists to `books` row.
 | Client cover adapter | `lib/three/coverPipeline.ts` | Done (4f: edge-28-pixel) |
 | Unified CoverMaterial | `components/3d/CoverMaterial.tsx` | Done (4f) |
 | Paper normalMap | `lib/three/paperNormal.ts` | Done (4f) |
-| Typographic cover fallback | (Step 4d) | Not started |
+| Typographic cover fallback | `lib/three/typographicCover.ts` + `app/api/cover-generate/route.ts` | Done (4d) |
 | Spine generator | (Step 5) | Not started |
+| Font assets | `assets/fonts/` via `outputFileTracingIncludes` | Done (4d) |
 
 ### Step 4f material architecture
 
@@ -232,13 +239,12 @@ Custom domain: deferred to Phase 4.
 
 Runtime: `next@14.2.35`, `react@18.3.1`, `@supabase/supabase-js@2.100.1`,
 `@supabase/ssr@0.9.0`, `three@0.169.0`, `@react-three/fiber@8.17.10`,
-`@react-three/drei@9.114.0`, `zustand@5.0.1`, `sharp@^0.33`.
+`@react-three/drei@9.114.0`, `zustand@5.0.1`, `sharp@^0.33`,
+`@napi-rs/canvas@^0.1` (Step 4d), `zod@^3` (Step 4d).
 
 Dev: `typescript@5.7.0`, `tailwindcss@3.4.0`, `r3f-perf@7.2.3`,
 type packages.
 
-Phase 1 to-add: server-side canvas library for Step 4d
-(`@napi-rs/canvas` / `@vercel/og` / `node-canvas` — decide at start).
 
 Phase 2+: `next-intl`, `framer-motion`.
 

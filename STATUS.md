@@ -75,3 +75,21 @@
 | **Step 4f: cover slab covers full `W × H`, page block inset on 3 non-spine sides** | Previous `COVER_SLAB_WIDTH = W - COVER_THICKNESS` left page block flush with spine, protruding only at fore-edge. Correct Stripe Press silhouette requires page block visible at top, bottom, and fore-edge. |
 | **Step 4f: procedural paper normalMap on page block** | Runtime DataTexture, module singleton, zero asset bundle impact. Reveals Stripe Press horizontal grain under grazing light. |
 | **Step 4f: BookshelfScene grazing light rig** | Lowered key light (y=6 → y=2), added horizontal rim light (y=0.3), capped Environment intensity to 0.25. Previous top-down + full-strength environment washed normalMap out of existence. |
+
+## Step 4d closed (2026-04-11)
+
+| Decision | Rationale |
+|---|---|
+| Renderer: `@napi-rs/canvas` | Stripe Press serif typography needs precise font metrics. Vercel iad1 prebuilt binary verified on PR preview. |
+| Fonts: Noto Serif KR + Noto Sans KR variable, in `assets/fonts/` (NOT `public/`) | `outputFileTracingIncludes` scopes 33MB to `/api/cover-generate` only. Other functions stay slim. |
+| `serverComponentsExternalPackages` includes `@napi-rs/canvas` | Native binary, must not be webpack-bundled. Same pattern as `sharp`. |
+| Deterministic seed: `sha1(title|author) → HSL` (Hue full, Sat 35-50%, Lum 18-28%) | Same input → same PNG → same SHA1 → Storage dedup. Warm dark range matches Stripe Press tone. |
+| `/api/cover-generate` reuses `processImage()` via railway-oriented `Result` handling | Identical post-processing as 4b/4c. Errors propagated as `ProcessImageError` discriminated union, not flattened. |
+| RLS path `covers/{user_id}/{sha1}.webp` | Same as 4c. `covers_user_insert_own_folder` policy enforced. |
+| Step 4d-4 (dev tab Generate section) **skipped** | BookModel substitution (option B) gave faster feedback loop than dev tab. dev/upload stays as-is until Step 7 deletion. |
+| **4d closure visual verification** | Image 1: front face letterbox + 데미안 글자 정상. Image 2: spine + back wine tone, paper normalMap fore-edge OK (4f no regression). Image 4 + final: page block top = cream `#F0E6D3` confirmed, paper normalMap intact. Step 4f no regression. |
+
+**Deferred from 4d (logged in LEARNINGS)**:
+- Letterbox color mismatch: client `coverPipeline.ts` 4-corner sampling produces pink/lilac instead of wine `#4B203E` for typographic covers. Vignette + sampling-region averaging breaks the "edge solid color" assumption that 4-corner is built on. Phase 2: cover pipeline unification.
+- CJK short titles ("데미안" 3 chars) under-fill the safe area at fixed 96px. Dynamic title sizing for short CJK deferred.
+- NotoSerifKR variable-font weight 700 axis rendering acceptable but not verified rigorous.

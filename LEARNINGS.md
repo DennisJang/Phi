@@ -168,3 +168,36 @@ These are known limitations, tracked here so STATUS stays current-only.
   Step 7 when the real add-book flow provides URLs from DB.
 - **`image.aladin.co.kr` remotePattern** in `next.config.js` is a
   Step 4a legacy. Remove during Phase 1 gate review.
+  ## Step 4d learnings
+
+### JS object literal duplicate keys are silent overrides (Step 4d)
+`next.config.js`에 `experimental` 키를 두 번 정의하면 뒤엣것이 앞엣것을
+조용히 덮어쓴다. lint가 잡지 않으면 모르고 지나간다. 단일 객체 설정
+파일에 옵션을 추가할 때는 기존 키를 먼저 grep해서 병합 여부를 확인할
+것. 특히 `experimental`처럼 여러 기능이 모이는 키는 위험 — 한 줄 잘못
+넣으면 sharp가 webpack에 번들링되면서 4b/4c가 통째로 깨진다.
+
+### Don't assume signatures of modules in the same codebase (Step 4d)
+"같은 레포에 있으니까 안다"는 익숙함의 환각. `processImage()`는
+railway-oriented `Result` 패턴이고 `ProcessedImage` 필드는 `webpBuffer`
+(not `webp`)이며, `lib/image/hash.ts`는 `hashImageBytes` (not `sha1`)를
+export한다. 새 라우트가 기존 모듈을 재사용할 때는 `cat`/`grep`으로
+실제 시그니처를 먼저 확인할 것. 추측 7개를 한 번에 깨는 데 5분이면
+충분하다.
+
+### Railway-oriented Result must not be wrapped in try-catch (Step 4d)
+`Result<T, E>` 패턴으로 에러를 표현하는 함수를 try-catch로 감싸면
+(1) 절대 던지지 않는 함수에 무용한 가드를 씌우는 것이고 (2) 타입 정보
+풍부한 `E` discriminated union을 일반 메시지로 뭉갠다. 호출자도 같은
+패턴으로 받아 `if (!result.ok) return ...`로 분기하고 `result.error`를
+그대로 전파해야 정보 손실이 없다.
+
+### 4-corner dominantColor sampling assumes edge-solid covers (Step 4d)
+`coverPipeline.ts`의 client-side 4-corner 샘플링은 "Aladin 책 표지처럼
+가장자리가 솔리드 단색"이라는 구조적 가정 위에 서 있다. typographic
+cover는 가장자리에 vignette + 중앙에 dominant 색상이라 이 가정이
+깨진다. 결과: 본문은 와인색(`#4B203E`)인데 letterbox는 분홍/라일락으로
+샘플링됨. **Phase 2에서 cover 파이프라인 통합 시 반드시 해결**:
+typographic cover는 vignette 제거하거나, dominantColor 추출 전략을
+"중앙 영역 평균"으로 분기하거나, generator가 dominantColor를 직접
+반환해서 클라이언트 재계산을 우회해야 한다.

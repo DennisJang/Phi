@@ -532,6 +532,10 @@ phi/
 - **Unified material on `onBeforeCompile`-patched meshStandardMaterial**
   for all 3 outward faces. One class, 5 uniforms, face-specific prop.
   Preserves PBR scene lighting on every face. (Step 4f)
+  - **Native binary npm packages must be in `serverComponentsExternalPackages`**.
+  `sharp`, `@napi-rs/canvas` 등 native 바이너리는 webpack 번들링 시
+  깨진다. `next.config.js`의 `experimental.serverComponentsExternalPackages`
+  배열에 반드시 등록. 새 native 패키지 추가 시 첫 작업. (Step 4d)
 - **normalMap needs grazing light, not amplitude**. Environment presets
   must be capped (`environmentIntensity` ≤ 0.25) or they wash out
   normal detail. Key light at grazing altitude; explicit horizontal rim
@@ -550,16 +554,15 @@ phi/
   φ-derived**. Pitch must stay 0 to preserve the spine's vertical
   silhouette — any pitch introduces trapezoidal distortion. (2026-04-10)
 
-### New entry — Step 4f closure
+### New entry — Step 4d closure
 
-**2026-04-11 · Step 4f closed**: Unified CoverMaterial + geometry
-redesign + paper normalMap + grazing light rig. Visual result is
-Stripe Press silhouette with color-continuous front/spine/back and
-subtle (not dramatic) paper grain. Grain strength tuning deferred to
-Phase 2 real iPad testing per owner decision during the 2026-04-11
-session. See `HISTORY.md` for the pre-closure iteration log and
-`LEARNINGS.md` for the engineering patterns accumulated.
-
+**2026-04-11 · Step 4d closed**: Source C (typographic cover) 파이프라인
+검증 완료. `@napi-rs/canvas` + Noto Serif/Sans KR + 결정론 시드(sha1→HSL)
+로 PNG 생성 → `processImage()` → RLS 업로드. 4b(URL) + 4c(upload) +
+4d(generate) 세 소스가 동일 응답 셰이프 `{ url, dominantColor, width,
+height }`로 수렴. BookModel 정면 렌더로 end-to-end 검증. dev/upload
+Generate 탭은 영구 격하. 다음은 Step 5 spine generator. 자세한 학습은
+LEARNINGS.md, 이전 결정 로그는 HISTORY.md.
 
 ## 10. Development Workflow Rules
 
