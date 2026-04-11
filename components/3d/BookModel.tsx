@@ -3,19 +3,13 @@
 /**
  * BookModel — procedural book geometry.
  *
- * Dimensions (BASE_SCALE = 1.4):
- *   width     1.400   (BASE_SCALE)
- *   height    2.265   (BASE_SCALE × φ)         — §6.1, φ-derived
- *   thickness 0.350   (BASE_SCALE × 0.25)      — visual calibration, NOT φ
+ * Dimensions live in lib/three/bookDimensions.ts (extracted to avoid
+ * a circular import with CoverMaterial).
  *
- * NOTE: thickness is intentionally decoupled from φ but still scales
- * with BASE_SCALE. The §6.1 formula (thickness = width × 1/φ² ≈ 0.535)
- * makes the book read as a brick under the §9 spine-on camera (15° yaw)
- * — the spine stops being the dominant silhouette. 0.25 × BASE_SCALE
- * keeps the spine dominant while still feeling like a real book, and
- * stays proportional if BASE_SCALE is ever adjusted for scene framing.
- * height:width = φ:1 is preserved. Re-evaluate against a full shelf
- * in Phase 2.
+ * Front cover uses CoverMaterial (shader, letterbox) when a URL is
+ * provided; otherwise falls back to the preset's meshStandardMaterial.
+ * Back cover and spine always use meshStandardMaterial to preserve
+ * PBR lighting response — only the front face is shader-lit.
  *
  * Geometry layout (origin at spine hinge, +X = book extends away from spine):
  *
@@ -26,32 +20,21 @@
  *         |  [back cover ]──── +X (width)
  *        /
  *       +Z (thickness of closed book)
- *
- * All meshes are positioned so the spine sits on the X=0 plane,
- * which gives us a clean hinge axis for future features.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
-import { PHI } from '@/lib/phi/ratios';
+import { BOOK_DIMENSIONS } from '@/lib/three/bookDimensions';
 import {
   MATERIAL_PRESETS,
   PAGE_BLOCK_MATERIAL,
   type MaterialPresetName,
 } from '@/lib/three/materials';
-import { useCoverTexture } from '@/lib/three/useCoverTexture';
+import { loadCoverFromUrl, type CoverPipelineResult } from '@/lib/three/coverPipeline';
+import { CoverMaterial } from './CoverMaterial';
 
-// Base scale — chosen to preserve previous scene framing.
-const BASE_SCALE = 1.4;
-
-
-// φ-derived dimensions (§6.1)
-const BOOK_WIDTH = BASE_SCALE;                 // 1.400
-const BOOK_HEIGHT = BASE_SCALE * PHI;          // 2.265
-const BOOK_THICKNESS = BASE_SCALE * 0.25; //0.140
-
-// Construction constants (not φ-derived; physical book detail)
+const { width: BOOK_WIDTH, height: BOOK_HEIGHT, thickness: BOOK_THICKNESS } = BOOK_DIMENSIONS;
 const COVER_THICKNESS = 0.02;
-const PAGE_INSET = 0.03; // pages recessed slightly from cover edge
+const PAGE_INSET = 0.03;
 
 function useBoxGeometry(width: number, height: number, depth: number) {
   return useMemo(
@@ -60,14 +43,51 @@ function useBoxGeometry(width: number, height: number, depth: number) {
   );
 }
 
+/**
+ * Load a cover URL through the pipeline.
+ * Race-condition safe: if the URL changes mid-flight, the stale
+ * result is discarded and the stale texture is disposed.
+ */
+function useCoverPipeline(url: string | undefined): CoverPipelineResult | null {
+  const [result, setResult] = useState<CoverPipelineResult | null>(null);
+
+  useEffect(() => {
+    if (!url) {
+      setResult(null);
+      return;
+    }
+    let cancelled = false;
+    let loaded: CoverPipelineResult | null = null;
+
+    loadCoverFromUrl(url)
+      .then((r) => {
+        if (cancelled) {
+          r.texture.dispose();
+          return;
+        }
+        loaded = r;
+        setResult(r);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[BookModel] cover load failed:', err);
+          setResult(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (loaded) loaded.texture.dispose();
+    };
+  }, [url]);
+
+  return result;
+}
+
 export interface BookModelProps {
-  /** Material preset for the cover. Page block is always paper-toned. */
   preset?: MaterialPresetName;
-  /** Optional cover art URL. When provided, UV-mapped onto the front cover only. */
   coverImageUrl?: string;
-  /** Position of the book group in world space. */
   position?: [number, number, number];
-  /** Rotation (euler) of the book group in world space. */
   rotation?: [number, number, number];
 }
 
@@ -78,46 +98,40 @@ export function BookModel({
   rotation = [0, 0, 0],
 }: BookModelProps) {
   const coverMat = MATERIAL_PRESETS[preset];
-  const { texture: coverTexture } = useCoverTexture(coverImageUrl);
+  const cover = useCoverPipeline(coverImageUrl);
 
-  // Geometries — memoized so React reuses them across renders
   const frontCoverGeo = useBoxGeometry(BOOK_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
   const backCoverGeo = useBoxGeometry(BOOK_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
-  const spineGeo = useBoxGeometry(
-    COVER_THICKNESS,
-    BOOK_HEIGHT,
-    BOOK_THICKNESS
-  );
+  const spineGeo = useBoxGeometry(COVER_THICKNESS, BOOK_HEIGHT, BOOK_THICKNESS);
   const pageBlockGeo = useBoxGeometry(
     BOOK_WIDTH - PAGE_INSET * 2,
     BOOK_HEIGHT - PAGE_INSET * 2,
     BOOK_THICKNESS - COVER_THICKNESS * 2
   );
 
-  // Half-width offset so the spine sits on X=0 (hinge axis)
   const halfW = BOOK_WIDTH / 2;
   const halfT = BOOK_THICKNESS / 2;
 
   return (
     <group position={position} rotation={rotation}>
-      {/* Front cover — top face of closed book.
-      When a cover image is loaded, color must be white so the texture
-      isn't tinted by the preset's base color. */}
+      {/* Front cover — CoverMaterial (shader) when cover loaded, preset fallback otherwise */}
       <mesh
         geometry={frontCoverGeo}
         position={[halfW, 0, halfT - COVER_THICKNESS / 2]}
         castShadow
         receiveShadow
       >
-        <meshStandardMaterial
-          roughness={coverMat.roughness}
-          metalness={coverMat.metalness}
-          color={coverTexture ? '#ffffff' : coverMat.color}
-          map={coverTexture ?? undefined}
-        />
+        {cover ? (
+          <CoverMaterial
+            texture={cover.texture}
+            dominantColor={cover.dominantColor}
+            coverAspect={cover.coverAspect}
+          />
+        ) : (
+          <meshStandardMaterial {...coverMat} />
+        )}
       </mesh>
 
-      {/* Back cover — bottom face */}
       <mesh
         geometry={backCoverGeo}
         position={[halfW, 0, -halfT + COVER_THICKNESS / 2]}
@@ -127,7 +141,6 @@ export function BookModel({
         <meshStandardMaterial {...coverMat} />
       </mesh>
 
-      {/* Spine — left edge, running full height, full thickness */}
       <mesh
         geometry={spineGeo}
         position={[COVER_THICKNESS / 2, 0, 0]}
@@ -137,21 +150,12 @@ export function BookModel({
         <meshStandardMaterial {...coverMat} />
       </mesh>
 
-      {/* Page block — sandwiched between covers */}
-      <mesh
-        geometry={pageBlockGeo}
-        position={[halfW, 0, 0]}
-        receiveShadow
-      >
+      <mesh geometry={pageBlockGeo} position={[halfW, 0, 0]} receiveShadow>
         <meshStandardMaterial {...PAGE_BLOCK_MATERIAL} />
       </mesh>
     </group>
   );
 }
 
-/** Export book dimensions so other components can lay books out on a shelf. */
-export const BOOK_DIMENSIONS = {
-  width: BOOK_WIDTH,
-  height: BOOK_HEIGHT,
-  thickness: BOOK_THICKNESS,
-} as const;
+/** Re-export for API stability — callers already import this from BookModel. */
+export { BOOK_DIMENSIONS };
