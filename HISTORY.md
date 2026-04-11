@@ -68,7 +68,7 @@
 | Decision | Rationale |
 |---|---|
 | Book thickness decoupled from φ formula | §6.1 `width × 1/φ²` = 0.535 read as a brick under 15° yaw camera. Now `BASE_SCALE × 0.25 = 0.350`. Height:width = φ:1 preserved. |
-| Front cover ShaderMaterial (letterbox), back/spine meshStandardMaterial (Stehttps://markdown.kr/?lang=ko#p 4e) | Single-draw letterbox composite. Tradeoff: front loses PBR scene lighting; back + spine retain it. |
+| Front cover ShaderMaterial (letterbox), back/spine meshStandardMaterial (Step 4e) | Single-draw letterbox composite. Tradeoff: front loses PBR scene lighting; back + spine retain it. |
 | `dominantColor` recomputed client-side (4-corner sampling, Step 4e) | Server value not yet persisted until Step 7. Same algorithm as server → free regression signal later. |
 | **Step 4f: unified CoverMaterial via `onBeforeCompile` on meshStandardMaterial** | All 3 faces (front/spine/back) share the same patched material class. Front gets texture + letterbox, spine + back get solid `coverBaseColor`. Restores PBR response on all faces. |
 | **Step 4f: single `coverBaseColor` (edge 28-pixel average, center 4×4 excluded)** | Replaced 2-color top/bottom strategy. Stripe Press books don't have top/bottom bands — they have a single cover base with image on top. luminance-min spine trick polished. |

@@ -137,123 +137,54 @@ These two are not competing — they are two faces of the same philosophy: *one 
 
 ## 4. Database Schema
 
-### 4.1 Core tables
+**Single source of truth**: `supabase/migrations/*.sql`.
 
-```sql
--- Users (extends auth.users)
-create table public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  username text unique,  -- required from Phase 3 onward
-  display_name text,
-  avatar_url text,
-  shelf_visibility text default 'private' 
-    check (shelf_visibility in ('private', 'public')),
-  theme_preference text default 'dark' 
-    check (theme_preference in ('dark', 'light')),
-  language_preference text default 'ko' 
-    check (language_preference in ('ko', 'en')),
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
+This section used to duplicate the full SQL. That duplication drifted
+from the actual migration files during the Phi 1.0 redesign and cover
+upload work. Never again — read the migrations directly.
 
--- Books
-create table public.books (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references public.profiles(id) on delete cascade not null,
-  title text not null,
-  author text,
-  isbn text,
-  publisher text,
-  published_year integer,
-  
-  -- Cover sourcing
-  cover_source text check (cover_source in ('aladin_url', 'user_upload', 'typographic_generated')),
-  cover_image_url text,         -- final URL after proxy/upload
-  cover_storage_path text,       -- if user_upload
-  cover_dominant_color text,     -- hex, extracted server-side
-  
-  -- Shelf placement
-  shelf_order integer,           -- position in the horizontal shelf
-  section_label text,            -- optional "post-it" section marker
-  is_section_start boolean default false,
-  
-  -- Metadata
-  source text check (source in ('aladin_api', 'manual', 'google_books')),
-  total_pages integer,           -- for future display only; thickness is fixed
-  metadata jsonb,
-  
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
+### 4.1 Current migrations
 
--- Book detail pages (one per book)
-create table public.book_pages (
-  id uuid primary key default gen_random_uuid(),
-  book_id uuid references public.books(id) on delete cascade unique not null,
-  
-  -- Edit mode: template (fill-in) or canvas (block editor)
-  edit_mode text default 'template' 
-    check (edit_mode in ('template', 'canvas')),
-  
-  -- Template preset (when edit_mode = 'template')
-  template_preset text 
-    check (template_preset in ('classic', 'minimal', 'quote_first', 'essay')),
-  
-  -- Block-based content (shared by both modes)
-  content jsonb,  -- see types/blocks.ts for BookPageContent structure
-  
-  -- Per-page theme override (null = use user preference)
-  theme_override text check (theme_override in ('dark', 'light')),
-  
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
+| File | Date | Summary |
+|---|---|---|
+| `20260410_000000_phi_redesign.sql` | 2026-04-10 | Phi 1.0 redesign: drop 5 deprecated tables, reshape profiles + books, create 5 new tables, 12 RLS policies, `get_shelf_signal()` SECURITY DEFINER function, 8 indexes |
+| `20260410_120000_storage_policies_reset.sql` | 2026-04-10 | Drop 7 legacy storage policies, add `covers_public_read` |
+| `20260410_140000_covers_user_upload_policies.sql` | 2026-04-10 | Add `covers_user_insert_own_folder`, `_update_`, `_delete_` (scoped by `storage.foldername(name)[1] = auth.uid()::text`) |
 
--- Follows (= "save" relationship, Instagram-style)
-create table public.follows (
-  id uuid primary key default gen_random_uuid(),
-  follower_id uuid references public.profiles(id) on delete cascade not null,
-  following_id uuid references public.profiles(id) on delete cascade not null,
-  notifications_enabled boolean default false,
-  created_at timestamptz default now(),
-  unique(follower_id, following_id),
-  check (follower_id != following_id)
-);
+### 4.2 Tables
 
--- Saved books (individual book bookmarking, distinct from following a shelf)
-create table public.saved_books (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references public.profiles(id) on delete cascade not null,
-  book_id uuid references public.books(id) on delete cascade not null,
-  created_at timestamptz default now(),
-  unique(user_id, book_id)
-);
+`profiles`, `books`, `book_pages`, `follows`, `saved_books`,
+`notifications`, `donation_records`. All RLS-enabled. See migrations
+for columns, constraints, indexes, and policies.
 
--- Notifications (Phase 3+)
-create table public.notifications (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references public.profiles(id) on delete cascade not null,
-  type text not null check (type in ('new_book', 'updated_page', 'follow')),
-  actor_id uuid references public.profiles(id) on delete cascade,
-  book_id uuid references public.books(id) on delete cascade,
-  read_at timestamptz,
-  created_at timestamptz default now()
-);
+### 4.3 Design principles (always in force)
 
--- Donation transparency records (Phase 4, manually entered)
-create table public.donation_records (
-  id uuid primary key default gen_random_uuid(),
-  period_start date not null,
-  period_end date not null,
-  total_revenue_krw integer not null,
-  donation_amount_krw integer not null,
-  recipient_organization text not null,
-  donated_at timestamptz not null,
-  receipt_url text,
-  created_at timestamptz default now()
-);
-```
+- **RLS-first**: every new table gets RLS enabled before any data. No
+  exceptions. See §11.3 RLS checklist.
+- **Anti-comparison enforcement at DB level**: `follows` has no
+  "see who follows you" policy. Follower counts exposed only through
+  `get_shelf_signal()` which returns abstract buckets, never raw numbers.
+- **Server-side aggregation via SECURITY DEFINER**: when a count or
+  aggregate must cross the RLS boundary (e.g., counting followers
+  across users), use a `SECURITY DEFINER` function so raw rows are
+  never directly readable.
+- **Private by default**: `shelf_visibility` defaults to `'private'`.
+  Public is explicit opt-in.
+- **Migration discipline**: all schema changes via versioned SQL
+  files in `supabase/migrations/`. Never edit production via dashboard.
+  Test on dev project first.
 
+### 4.4 Storage buckets
+
+Only `covers` remains (5 legacy buckets removed 2026-04-10).
+
+| Bucket | Public | Limit | MIME |
+|---|---|---|---|
+| `covers` | ✓ | 5 MB | image/jpeg, image/png, image/webp |
+
+Two write paths coexist: `{sha1}.webp` at root via service_role from
+`/api/cover-proxy`, and `{user_id}/{sha1}.webp` via cookie-bound client
+from `/api/cover-upload` (RLS enforced).
 ### 4.2 RLS Policies
 
 **Principle**: RLS enforces the "fairness + anti-comparison" philosophy at the database level.
@@ -567,46 +498,68 @@ phi/
 
 ---
 
-## 9. Decisions Log
+## 9. Decisions Log (living principles)
 
-| Date | Decision | Rationale |
-|---|---|---|
-| 2026-03-29 | Web app (React) over native (SwiftUI) | Claude produces + tests React instantly; Capacitor wraps later |
-| 2026-03-29 | No Instagram API | Deprecated Basic Display; restricted Graph API |
-| 2026-03-29 | Capacitor for store distribution | Same codebase for web + iOS + Android |
-| 2026-04-08 | Next.js pinned at 14.2.35 through Phase 1 | Avoid mid-phase framework upgrade risk |
-| 2026-04-10 | Design language split: MD Vinyl (object) + Stripe Press (layout) | Same philosophy, two faces — not a forced merger |
-| 2026-04-10 | Tablet landscape only, phone deferred | Small screen demands independent redesign, not shrunken tablet |
-| 2026-04-10 | Korean + English only | Controlled i18n complexity, matches primary market |
-| 2026-04-10 | Single main shelf per user + section labels | Chose Instagram's "saved" model over Spotify's "multiple playlists" |
-| 2026-04-10 | Follower counts hidden forever | Anti-comparison is core philosophy; prevents reading from becoming performative |
-| 2026-04-10 | Shelf save counts shown to owner only, abstracted signals to others | Motivation without comparison |
-| 2026-04-10 | Private shelf by default | Privacy before exposure, user opts into public |
-| 2026-04-10 | Cover mapping: dominant color letterbox (Q8-c) | Object-first integration, covers "melt into" the book surface |
-| 2026-04-10 | Book thickness fixed, not scaled by page count | Consistency > realism, simpler shelf layout math |
-| 2026-04-10 | Aladin (ko) + Google Books (en) as only metadata sources | Avoid scraping (Kyobo, YES24); use deterministic URL for purchase links instead |
-| 2026-04-10 | Book open animation (Step 5) abandoned | App's core is ownership + display, not opening ceremony |
-| 2026-04-10 | LLM editing removed entirely | Free app philosophy; template + constrained block editor sufficient |
-| 2026-04-10 | No payment processing ever | Revenue only from affiliates → Phi → 10% donation. Users never pay. |
-| 2026-04-10 | Constrained Creativity as viral engine | "Same constraints, different results" — consistency builds trust and fanbase |
-| 2026-04-10 | Non-replication principle | No template-copy feature; observe → inspire → recreate is the learning loop |
-| 2026-04-10 | Phi System (golden ratio) applied across 5 layers | Object, layout, typography, interaction, brand — all bound by φ 
-| 2026-04-10 | bgCanvas shifted from #0A0A0A to #1A1612 (warm very-dark) | Stripe Press's warm brown background insight — books should feel held, not isolated. Cold pure-black reads as void; warm dark reads as atmosphere. |
-| 2026-04-10 | Shelf view camera: yaw 15°, pitch 0° (no φ derivation) | Visual calibration, not φ-derived. User spec: spine dominant, front cover edge as sliver, no top/bottom faces visible. Pitch must stay 0 to preserve spine's vertical silhouette — any pitch introduces trapezoidal distortion. |
-| 2026-04-10 | Phi System Tailwind binding: single source of truth via import | `tailwind.config.ts` imports PHI_DARK/DURATION_MS/PHI_EASING/SPACING_PX directly from `lib/phi/`. No hardcoded design token in Tailwind config. CSS variables in `globals.css` removed entirely; pseudo-elements use `@apply`. |
-| 2026-04-10 | 5개 legacy Storage 버킷 (uploads/photos/thumbnails/notes/share-cards) 삭제, `covers`만 유지 | 모두 비어있어 손실 없음. 폐기된 photographer 생태계 + LLM note 기능 잔재. 7개 legacy RLS 정책도 함께 드롭하고 단일 `covers_public_read` 정책으로 교체. |
-| 2026-04-10 | Cover proxy: 인-라우트 캐시 없음 (pure transformer) | supabase-js `list()`가 user metadata를 반환하지 않아 캐시 hit 시 dominantColor를 복구할 수 없음. 호출자(`books` 테이블)가 진짜 캐시 역할. 단순함이 정확함을 이김. |
-| 2026-04-10 | colorthief 제거, sharp 단독 네 모서리 dominant color 추출로 전환 | colorthief v2의 Buffer 입력 경로가 Node 환경에서 런타임 실패. 책 커버는 배경이 가장자리에 위치하는 디자인 구조라 MMCQ보다 4-corner 평균이 오히려 본질에 더 부합. 외부 의존성 1개 감소. |
-| 2026-04-10 | Cover proxy: 호출자가 `books.cover_image_url` + `cover_dominant_color`에 결과를 영구 저장하는 책임을 진다 | proxy는 image transformation 서비스, DB 쓰기는 별도 관심사. 명확한 separation of concerns. 같은 source URL → SHA-1 → 동일한 storage path → upsert로 idempotent 보장. |
-| 2026-04-10 | Phase 1 identity layer: Supabase anonymous sign-in | Step 4c requires auth.uid() for RLS-scoped storage uploads, but full auth (OAuth, magic link) is a Phase 2 commitment. Anonymous sign-in gives us a real auth.users row with is_anonymous=true — RLS treats it identically to a real user. Phase 2 can link the anonymous identity to a real one via supabase.auth.linkIdentity(), preserving any data created during Phase 1. The alternative (public uploads to a shared folder) would have created a "Phase 2 migration debt" that is always more expensive than expected. |
-| 2026-04-10 | `ensureAnonymousSession()` must de-duplicate in-flight calls at the module level | React Strict Mode invokes useEffect twice in dev; Suspense and streaming can do the same in prod. A per-effect `cancelled` flag only blocks React state updates — in-flight network requests complete and mint duplicate anonymous users in auth.users. The fix is a module-level in-flight promise that all callers await, plus a cached successful result. This pattern applies to any helper that "must run exactly once per browser session". |
-| 2026-04-10 | Browser Supabase client becomes a singleton | Multiple `createBrowserClient()` instances fragment auth state (session, JWT) across instances, causing downstream calls to authenticate inconsistently. `lib/supabase/client.ts` now caches the first-constructed instance and returns it for all subsequent `createClient()` calls. Lazy construction preserves SSR-safety. |
-| 2026-04-10 | Two-layer upload validation: shallow (declared) + deep (sharp decode) | Step 4c accepts untrusted bytes. Client-declared Content-Type and size are not a security boundary — any malicious client can lie. The real validation is whether sharp can decode the bytes. Shallow layer (MIME allowlist + 5MB limit) exists only to fail honest mistakes cheaply. Magic-byte parsing is unnecessary because sharp does it more rigorously as part of decoding. This design generalizes to any future route that accepts binary input. |
-| 2026-04-10 | RLS is the source of truth for upload authorization, not application code | Once the `covers_user_insert_own_folder` policy was in place, the `/api/cover-upload` route deliberately does NOT re-check `path startsWith user_id` in TypeScript. The policy enforces it at the database level, and re-implementing the check in application code would create a place for the two definitions to drift. This pattern should be followed for any future RLS-scoped resource: the policy is authoritative, the application code must not duplicate it. |
-| 2026-04-11 | Book thickness decoupled from φ formula | §6.1 says thickness = width × 1/φ². At BASE_SCALE = 1.4 this gives 0.535, which reads as a brick under the §9 spine-on 15° yaw camera — spine stops being the dominant silhouette. thickness is now `BASE_SCALE × 0.25 = 0.350`, visual calibration. height:width = φ:1 preserved. Re-evaluate against full shelf in Phase 2. |
-| 2026-04-11 | Front cover uses ShaderMaterial (letterbox), back/spine stay meshStandardMaterial | Shader lets us composite a cover of any aspect ratio onto the 1:φ face with dominantColor letterbox in a single draw (Step 4e, §6.2 Q8-c verified). TRADEOFF: front face no longer receives PBR scene lighting. Back and spine still do, so overall scene tone is preserved. If the lighting discontinuity becomes visible on a full shelf, Phase 2 will port to `onBeforeCompile` patching of meshStandardMaterial. |
-| 2026-04-11 | dominantColor recomputed client-side via 4-corner sampling (mirror of server sharp logic) | Server returns dominantColor in /api/cover-* JSON, but we don't persist it until Step 7 (DB wiring). Until then, `coverPipeline.loadCoverFromUrl` re-extracts it from the same HTMLImageElement used for the THREE.Texture. Same 4×4 downscale + 4-corner average as server → results should agree within rounding, giving a free regression signal later. |
----
+> Historical decisions archived to `HISTORY.md`. This log keeps only
+> principles still in active force — rules a future session must
+> follow. Append new principles at the bottom. Move superseded ones
+> to HISTORY.md with a note.
+
+### Always in force
+
+- **RLS is the source of truth for authorization**. Application code
+  must not re-implement policy predicates. (Step 4c)
+- **Client Content-Type is not a security boundary**. The real
+  boundary is whatever actually decodes the bytes. (Step 4c)
+- **Module-level in-flight dedup for "once per session" helpers**.
+  Per-effect cancellation flags only block React state updates, not
+  network requests. (Step 4c)
+- **Browser Supabase client is a singleton**. Multiple instances
+  fragment auth state. (Step 4c)
+- **`getUser()` for auth decisions, `getSession()` only for local
+  cache checks**. `getUser()` verifies JWT signature. (Step 4c)
+- **Admin (service_role) client is factory, not singleton**. Per-request
+  construction, `persistSession: false`, never imported by shared-render
+  code. (Step 4b)
+- **Cover pipeline routes are pure transformers, not caches**. Callers
+  persist URL + dominantColor + dimensions to the `books` row. No
+  in-route cache. (Step 4b)
+- **Edge-28-pixel sampling for `coverBaseColor`** (central 4×4 excluded
+  from an 8×8 grid). Single color — no top/bottom split. Drives front
+  letterbox fill + spine + back. (Step 4f)
+- **Cover slab covers full `W × H`; page block inset 3 non-spine sides**.
+  Stripe Press silhouette. (Step 4f)
+- **Unified material on `onBeforeCompile`-patched meshStandardMaterial**
+  for all 3 outward faces. One class, 5 uniforms, face-specific prop.
+  Preserves PBR scene lighting on every face. (Step 4f)
+- **normalMap needs grazing light, not amplitude**. Environment presets
+  must be capped (`environmentIntensity` ≤ 0.25) or they wash out
+  normal detail. Key light at grazing altitude; explicit horizontal rim
+  light for fore-edge. (Step 4f)
+- **`onBeforeCompile` shader injection only at unconditional chunks**
+  (`<color_fragment>`, not `<map_fragment>`). USE_MAP-gated chunks are
+  empty when `material.map` is unset. (Step 4f)
+
+### Documented exceptions (with rationale)
+
+- **Book thickness is NOT φ-derived**. §6.1 formula `width × 1/φ²` =
+  0.535 reads as a brick under the §9 spine-on 15° yaw camera. Current
+  value: `BASE_SCALE × 0.25 = 0.350`. Height:width = φ:1 preserved.
+  Re-evaluate against full shelf in Phase 2. (2026-04-11)
+- **Shelf camera yaw 15°, pitch 0° is visual calibration, not
+  φ-derived**. Pitch must stay 0 to preserve the spine's vertical
+  silhouette — any pitch introduces trapezoidal distortion. (2026-04-10)
+
+### New entry — Step 4f closure
+
+**2026-04-11 · Step 4f closed**: Unified CoverMaterial + geometry
+redesign + paper normalMap + grazing light rig. Visual result is
+Stripe Press silhouette with color-continuous front/spine/back and
+subtle (not dramatic) paper grain. Grain strength tuning deferred to
+Phase 2 real iPad testing per owner decision during the 2026-04-11
+session. See `HISTORY.md` for the pre-closure iteration log and
+`LEARNINGS.md` for the engineering patterns accumulated.
+
 
 ## 10. Development Workflow Rules
 
