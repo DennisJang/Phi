@@ -15,8 +15,10 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ['sharp'],
+    serverComponentsExternalPackages: ['sharp', '@napi-rs/canvas'],
+    outputFileTracingIncludes: {
+      '/api/cover-generate': ['./assets/fonts/**/*'],
+    },
   },
 };
-
 module.exports = nextConfig;
