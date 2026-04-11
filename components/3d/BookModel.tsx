@@ -1,17 +1,18 @@
 'use client';
 
 /**
- * BookModel — procedural book geometry.
+ * BookModel — procedural book geometry with unified cover material.
  *
- * Dimensions live in lib/three/bookDimensions.ts (extracted to avoid
- * a circular import with CoverMaterial).
+ * All three outward faces (front / spine / back) use the SAME
+ * CoverMaterial class, differing only in `face` prop and uniforms.
+ * This is what delivers visual continuity: identical PBR response,
+ * identical roughness, edge-matched color on front + spineColor on
+ * the sides. See CoverMaterial.tsx header and Decisions Log 2026-04-11.
  *
- * Front cover uses CoverMaterial (shader, letterbox) when a URL is
- * provided; otherwise falls back to the preset's meshStandardMaterial.
- * Back cover and spine always use meshStandardMaterial to preserve
- * PBR lighting response — only the front face is shader-lit.
+ * When no cover URL is provided, all three faces fall back to the
+ * preset's plain meshStandardMaterial, preserving Step 3 behavior.
  *
- * Geometry layout (origin at spine hinge, +X = book extends away from spine):
+ * Geometry layout (origin at spine hinge, +X = book extends away):
  *
  *        +Y (height)
  *         |
@@ -29,59 +30,69 @@ import {
   PAGE_BLOCK_MATERIAL,
   type MaterialPresetName,
 } from '@/lib/three/materials';
-import { loadCoverFromUrl, type CoverPipelineResult } from '@/lib/three/coverPipeline';
+import { loadCoverFromUrl, type CoverSample } from '@/lib/three/coverPipeline';
 import { CoverMaterial } from './CoverMaterial';
 
 const { width: BOOK_WIDTH, height: BOOK_HEIGHT, thickness: BOOK_THICKNESS } = BOOK_DIMENSIONS;
 const COVER_THICKNESS = 0.02;
 const PAGE_INSET = 0.03;
-
-function useBoxGeometry(width: number, height: number, depth: number) {
-  return useMemo(
-    () => new THREE.BoxGeometry(width, height, depth),
-    [width, height, depth]
-  );
+// Cover slab X-width: full book width minus the spine's X footprint.
+// Leaves room for the page block to protrude at the fore-edge.
+const COVER_SLAB_WIDTH = BOOK_WIDTH - COVER_THICKNESS;
+const COVER_SLAB_X = COVER_THICKNESS + COVER_SLAB_WIDTH / 2;
+function useBoxGeometry(w: number, h: number, d: number) {
+  return useMemo(() => new THREE.BoxGeometry(w, h, d), [w, h, d]);
 }
 
 /**
- * Load a cover URL through the pipeline.
- * Race-condition safe: if the URL changes mid-flight, the stale
- * result is discarded and the stale texture is disposed.
+ * Race-safe cover loader.
+ *
+ * Previous version disposed `loaded` in cleanup, which could dispose
+ * a texture that was still rendering (the one currently held in
+ * `result` state). Fix: only cancel in-flight loads in cleanup, and
+ * dispose the OLD successful texture at the moment the NEW one
+ * replaces it in state. The final texture is disposed on unmount.
  */
-function useCoverPipeline(url: string | undefined): CoverPipelineResult | null {
-  const [result, setResult] = useState<CoverPipelineResult | null>(null);
+function useCoverSample(url: string | undefined): CoverSample | null {
+  const [sample, setSample] = useState<CoverSample | null>(null);
 
   useEffect(() => {
     if (!url) {
-      setResult(null);
+      setSample(null);
       return;
     }
     let cancelled = false;
-    let loaded: CoverPipelineResult | null = null;
-
     loadCoverFromUrl(url)
-      .then((r) => {
+      .then((next) => {
         if (cancelled) {
-          r.texture.dispose();
+          next.texture.dispose();
           return;
         }
-        loaded = r;
-        setResult(r);
+        setSample((prev) => {
+          if (prev) prev.texture.dispose();
+          return next;
+        });
       })
       .catch((err) => {
         if (!cancelled) {
           console.error('[BookModel] cover load failed:', err);
-          setResult(null);
         }
       });
-
     return () => {
       cancelled = true;
-      if (loaded) loaded.texture.dispose();
     };
   }, [url]);
 
-  return result;
+  useEffect(() => {
+    return () => {
+      setSample((prev) => {
+        if (prev) prev.texture.dispose();
+        return null;
+      });
+    };
+  }, []);
+
+  return sample;
 }
 
 export interface BookModelProps {
@@ -97,60 +108,84 @@ export function BookModel({
   position = [0, 0, 0],
   rotation = [0, 0, 0],
 }: BookModelProps) {
-  const coverMat = MATERIAL_PRESETS[preset];
-  const cover = useCoverPipeline(coverImageUrl);
+  const presetProps = MATERIAL_PRESETS[preset];
+  const cover = useCoverSample(coverImageUrl);
 
-  const frontCoverGeo = useBoxGeometry(BOOK_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
-  const backCoverGeo = useBoxGeometry(BOOK_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
+  const frontGeo = useBoxGeometry(COVER_SLAB_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
+  const backGeo = useBoxGeometry(COVER_SLAB_WIDTH, BOOK_HEIGHT, COVER_THICKNESS);
   const spineGeo = useBoxGeometry(COVER_THICKNESS, BOOK_HEIGHT, BOOK_THICKNESS);
-  const pageBlockGeo = useBoxGeometry(
-    BOOK_WIDTH - PAGE_INSET * 2,
+  const pageGeo = useBoxGeometry(
+    COVER_SLAB_WIDTH - PAGE_INSET,          // +X fore-edge inset (spine side flush)
     BOOK_HEIGHT - PAGE_INSET * 2,
     BOOK_THICKNESS - COVER_THICKNESS * 2
   );
 
-  const halfW = BOOK_WIDTH / 2;
   const halfT = BOOK_THICKNESS / 2;
+  const pageX = COVER_SLAB_X - PAGE_INSET / 2;
 
   return (
     <group position={position} rotation={rotation}>
-      {/* Front cover — CoverMaterial (shader) when cover loaded, preset fallback otherwise */}
+      {/* Front cover */}
       <mesh
-        geometry={frontCoverGeo}
-        position={[halfW, 0, halfT - COVER_THICKNESS / 2]}
+        geometry={frontGeo}
+        position={[COVER_SLAB_X, 0, halfT - COVER_THICKNESS / 2]}
         castShadow
         receiveShadow
       >
         {cover ? (
           <CoverMaterial
+            face="front"
+            preset={presetProps}
             texture={cover.texture}
-            dominantColor={cover.dominantColor}
-            coverAspect={cover.coverAspect}
+            coverAspect={cover.aspect}
+            colorTop={cover.colorTop}
+            colorBottom={cover.colorBottom}
           />
         ) : (
-          <meshStandardMaterial {...coverMat} />
+          <meshStandardMaterial {...presetProps} />
         )}
       </mesh>
 
+      {/* Back cover — solid spineColor when cover loaded */}
       <mesh
-        geometry={backCoverGeo}
-        position={[halfW, 0, -halfT + COVER_THICKNESS / 2]}
+        geometry={backGeo}
+        position={[COVER_SLAB_X, 0, -halfT + COVER_THICKNESS / 2]}
         castShadow
         receiveShadow
       >
-        <meshStandardMaterial {...coverMat} />
+        {cover ? (
+          <CoverMaterial
+            face="back"
+            preset={presetProps}
+            colorTop={cover.spineColor}
+            colorBottom={cover.spineColor}
+          />
+        ) : (
+          <meshStandardMaterial {...presetProps} />
+        )}
       </mesh>
 
+      {/* Spine — solid spineColor when cover loaded */}
       <mesh
         geometry={spineGeo}
         position={[COVER_THICKNESS / 2, 0, 0]}
         castShadow
         receiveShadow
       >
-        <meshStandardMaterial {...coverMat} />
+        {cover ? (
+          <CoverMaterial
+            face="spine"
+            preset={presetProps}
+            colorTop={cover.spineColor}
+            colorBottom={cover.spineColor}
+          />
+        ) : (
+          <meshStandardMaterial {...presetProps} />
+        )}
       </mesh>
 
-      <mesh geometry={pageBlockGeo} position={[halfW, 0, 0]} receiveShadow>
+      {/* Page block — always plain PBR */}
+      <mesh geometry={pageGeo} position={[pageX, 0, 0]} receiveShadow>
         <meshStandardMaterial {...PAGE_BLOCK_MATERIAL} />
       </mesh>
     </group>

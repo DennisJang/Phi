@@ -1,99 +1,185 @@
 'use client';
 
 /**
- * CoverMaterial — letterbox shader for the front cover face.
+ * CoverMaterial v2 — unified book-face material.
  *
- * Composites a cover texture onto the book's front face using UV
- * remapping. Cover aspect rarely matches face aspect (1:φ), so the
- * shader scales the cover to fit along the tighter axis and fills
- * the remainder with dominantColor — the "melts into the book
- * surface" effect (§9 Decisions Log, Q8-c).
+ * v1 injected at `<map_fragment>` which is USE_MAP-gated. Since we
+ * don't set material.map, that chunk was empty, replace() silently
+ * matched nothing, and the shader failed to compile with
+ * VALIDATE_STATUS false. v2 injects at `<color_fragment>` (always
+ * present) and uses a private `vCoverUv` varying so we don't depend
+ * on three.js's internal vUv (also USE_MAP-gated).
  *
- * TRADEOFF: uses THREE.ShaderMaterial, so the front face does NOT
- * receive PBR lighting from the scene. Back cover and spine still
- * use meshStandardMaterial and keep warm lighting. If the visual
- * difference is too loud, Phase 2 may port this to onBeforeCompile
- * patching of meshStandardMaterial.
+ * Strategy otherwise unchanged:
+ *   - meshStandardMaterial patched via onBeforeCompile → keeps PBR
+ *   - uHasTexture = 0 → solid uColorTop fill (spine / back)
+ *   - uHasTexture = 1 → letterbox image with colorTop / colorBottom fill
  */
-import { useEffect, useMemo } from 'react';
+
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { BOOK_DIMENSIONS } from './BookModel';
+import { BOOK_DIMENSIONS } from '@/lib/three/bookDimensions';
+import type { MaterialPresetProps } from '@/lib/three/materials';
 
-const VERT = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const FRAG = /* glsl */ `
-  uniform sampler2D uMap;
-  uniform vec3 uDominantColor;
-  uniform float uCoverAspect;
-  uniform float uFaceAspect;
-  varying vec2 vUv;
-
-  void main() {
-    vec2 uv = vUv;
-    if (uCoverAspect > uFaceAspect) {
-      // Cover wider than face → letterbox top/bottom
-      float scale = uFaceAspect / uCoverAspect;
-      float offset = (1.0 - scale) * 0.5;
-      float mapped = (uv.y - offset) / scale;
-      if (mapped < 0.0 || mapped > 1.0) {
-        gl_FragColor = vec4(uDominantColor, 1.0);
-        return;
-      }
-      uv.y = mapped;
-    } else {
-      // Cover taller than face → pillarbox left/right
-      float scale = uCoverAspect / uFaceAspect;
-      float offset = (1.0 - scale) * 0.5;
-      float mapped = (uv.x - offset) / scale;
-      if (mapped < 0.0 || mapped > 1.0) {
-        gl_FragColor = vec4(uDominantColor, 1.0);
-        return;
-      }
-      uv.x = mapped;
-    }
-    gl_FragColor = texture2D(uMap, uv);
-  }
-`;
+export type CoverFace = 'front' | 'spine' | 'back';
 
 export interface CoverMaterialProps {
-  texture: THREE.Texture;
-  dominantColor: string;
-  coverAspect: number;
+  face: CoverFace;
+  preset: MaterialPresetProps;
+  texture?: THREE.Texture;
+  coverAspect?: number;
+  colorTop: THREE.Color;
+  colorBottom: THREE.Color;
 }
 
-export function CoverMaterial({ texture, dominantColor, coverAspect }: CoverMaterialProps) {
-  const faceAspect = BOOK_DIMENSIONS.width / BOOK_DIMENSIONS.height;
+interface PatchedUniforms {
+  uHasTexture: { value: number };
+  uMap: { value: THREE.Texture | null };
+  uColorTop: { value: THREE.Color };
+  uColorBottom: { value: THREE.Color };
+  uCoverAspect: { value: number };
+  uFaceAspect: { value: number };
+}
 
-  const material = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      vertexShader: VERT,
-      fragmentShader: FRAG,
-      uniforms: {
-        uMap: { value: texture },
-        uDominantColor: { value: new THREE.Color(dominantColor) },
-        uCoverAspect: { value: coverAspect },
-        uFaceAspect: { value: faceAspect },
-      },
-    });
+function createPatchedMaterial(preset: MaterialPresetProps): {
+  material: THREE.MeshStandardMaterial;
+  uniforms: PatchedUniforms;
+} {
+  const material = new THREE.MeshStandardMaterial({
+    color: '#ffffff',
+    roughness: preset.roughness,
+    metalness: preset.metalness,
+  });
+
+  const uniforms: PatchedUniforms = {
+    uHasTexture: { value: 0 },
+    uMap: { value: null },
+    uColorTop: { value: new THREE.Color('#ffffff') },
+    uColorBottom: { value: new THREE.Color('#ffffff') },
+    uCoverAspect: { value: 1 },
+    uFaceAspect: { value: BOOK_DIMENSIONS.width / BOOK_DIMENSIONS.height },
+  };
+
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+
+    // Vertex: declare + write our own UV varying
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+      varying vec2 vCoverUv;`
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <uv_vertex>',
+      `#include <uv_vertex>
+      vCoverUv = uv;`
+    );
+
+    // Fragment: declare uniforms + varying
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+      uniform float uHasTexture;
+      uniform sampler2D uMap;
+      uniform vec3 uColorTop;
+      uniform vec3 uColorBottom;
+      uniform float uCoverAspect;
+      uniform float uFaceAspect;
+      varying vec2 vCoverUv;`
+    );
+
+    // Fragment: override diffuseColor after <color_fragment> initializes it
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+      {
+        vec3 phiColor;
+        if (uHasTexture < 0.5) {
+          phiColor = uColorTop;
+        } else {
+          vec2 fuv = vCoverUv;
+          if (uCoverAspect > uFaceAspect) {
+            float scale = uFaceAspect / uCoverAspect;
+            float offset = (1.0 - scale) * 0.5;
+            float mapped = (fuv.y - offset) / scale;
+            if (mapped < 0.0) {
+              phiColor = uColorBottom;
+            } else if (mapped > 1.0) {
+              phiColor = uColorTop;
+            } else {
+              fuv.y = mapped;
+              phiColor = texture2D(uMap, fuv).rgb;
+            }
+          } else {
+            float scale = uCoverAspect / uFaceAspect;
+            float offset = (1.0 - scale) * 0.5;
+            float mapped = (fuv.x - offset) / scale;
+            if (mapped < 0.0 || mapped > 1.0) {
+              phiColor = uColorTop;
+            } else {
+              fuv.x = mapped;
+              phiColor = texture2D(uMap, fuv).rgb;
+            }
+          }
+        }
+        diffuseColor.rgb = phiColor;
+      }
+      `
+    );
+
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.debug('[CoverMaterial] onBeforeCompile fired');
+    }
+  };
+
+  material.needsUpdate = true;
+  return { material, uniforms };
+}
+
+export function CoverMaterial({
+  face,
+  preset,
+  texture,
+  coverAspect,
+  colorTop,
+  colorBottom,
+}: CoverMaterialProps) {
+  const ref = useRef<{
+    material: THREE.MeshStandardMaterial;
+    uniforms: PatchedUniforms;
+  } | null>(null);
+
+  const built = useMemo(() => {
+    const next = createPatchedMaterial(preset);
+    ref.current = next;
+    return next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [preset.roughness, preset.metalness]);
 
-  // Update uniforms without rebuilding the material
   useEffect(() => {
-    material.uniforms.uMap.value = texture;
-    material.uniforms.uDominantColor.value.set(dominantColor);
-    material.uniforms.uCoverAspect.value = coverAspect;
-    material.uniforms.uFaceAspect.value = faceAspect;
-  }, [material, texture, dominantColor, coverAspect, faceAspect]);
+    const u = built.uniforms;
+    u.uColorTop.value.copy(colorTop);
+    u.uColorBottom.value.copy(colorBottom);
 
-  // GPU cleanup on unmount
-  useEffect(() => () => material.dispose(), [material]);
+    if (face === 'front' && texture && coverAspect) {
+      u.uHasTexture.value = 1;
+      u.uMap.value = texture;
+      u.uCoverAspect.value = coverAspect;
+    } else {
+      u.uHasTexture.value = 0;
+      u.uMap.value = null;
+      u.uCoverAspect.value = 1;
+    }
+    u.uFaceAspect.value = BOOK_DIMENSIONS.width / BOOK_DIMENSIONS.height;
+  }, [built, face, texture, coverAspect, colorTop, colorBottom]);
 
-  return <primitive object={material} attach="material" />;
+  useEffect(() => {
+    const current = built.material;
+    return () => {
+      current.dispose();
+    };
+  }, [built]);
+
+  return <primitive object={built.material} attach="material" />;
 }
