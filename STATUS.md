@@ -45,6 +45,14 @@ Five feature branches merged to main in one working day:
    verified via `/dev/upload` scratch form: success path, idempotency,
    413 (too large), 422 (MIME lie caught by sharp), and cross-user
    folder isolation.
+6. **feat/p1-cover-letterbox** — Step 4e: book height φ-derived
+   (thickness decoupled), CoverMaterial shader with letterbox +
+   dominantColor fill, coverPipeline.ts client adapter with 4-corner
+   sampling, BookModel front face uses CoverMaterial when URL
+   provided. Visual verification passed on Guns Germs Steel cover:
+   letterbox bands present, color extraction working, back/spine
+   retain PBR lighting. 57 FPS. useCoverTexture.ts removed.
+   
 
 ## Last completed (carried over from old Phase 1)
 
@@ -71,7 +79,7 @@ Five feature branches merged to main in one working day:
   - [x] **4b**: `/api/cover-proxy` + dominant color extraction (done 2026-04-10)
   - [x] **4c**: User upload → Supabase Storage → texture pipeline **(DONE 2026-04-10)**
   - [ ] 4d: Typographic generation fallback (canvas-based)
-  - [ ] 4e: Letterbox compositor (offscreen canvas)
+ - [x] 4e: Letterbox compositor (shader, done 2026-04-11)
   - [ ] 4f: All three sources produce consistent 3D output
 - [ ] ~~**Step 5** (old): Book open animation~~ **ABANDONED 2026-04-10**
 - [ ] **Step 5** (new): Auto spine generation (author · title · Φ)
@@ -103,19 +111,11 @@ Five feature branches merged to main in one working day:
 
 ## Immediate next tasks (order matters)
 
-1. **Step 4d** — Typographic cover generator (canvas-based fallback)
-   - Pure server-side canvas (`@napi-rs/canvas` or similar) — verify Vercel compat
-   - Renders title (serif, center) + author (sans, bottom) on dominant color background
-   - Golden-ratio layout with generous margins
-   - Returns same `{ url, dominantColor, width, height }` shape as cover-proxy / cover-upload
-2. **Step 4e** — Letterbox compositor
-   - Takes processed cover + dominant color → composites on book front face
-   - Visual verification of "cover melts into book surface" effect
-   - First time 4b/4c output actually reaches the 3D scene
-   - Retire `/dev/upload` scratch form here (or at Step 7, whichever comes first)
-3. **Step 5** — Spine texture generator (reuses 4d's canvas library choice)
-4. **Step 6** — Aladin API integration (requires TTB key registration first)
-5. **Step 7** — Manual book add flow
+1. Step 4d — Typographic cover generator (canvas-based fallback)
+2. Step 5  — Spine texture generator
+3. Step 6  — Aladin API
+4. Step 7  — Manual book add (remove DEV_TEST_COVER_URL here)
+
 
 ## Performance baseline (measured 2026-04-10, after landscape rebuild)
 
@@ -296,7 +296,25 @@ unrelated* but shares the same shape.
   left over from Step 4a's direct-loading approach. Can be removed
   during Phase 1 gate review now that the only client-facing cover
   URLs are Supabase CDN.
+## Known issues (new from Step 4e)
 
+- **Edge-matched letterbox 재검토 (Phase 2)** — Current letterbox
+  fills with a single dominantColor averaged from 4 corners. On
+  covers with strongly contrasting top/bottom bands (e.g. Guns Germs
+  Steel: white NYT header + dark bottom band), the averaged midtone
+  matches neither edge and the "melts into the book" effect is
+  weaker. Sample size is 1 — need more covers before deciding whether
+  to evolve to edge-matched letterbox (top letterbox samples top row,
+  bottom samples bottom row). Revisit at Phase 2 start.
+- **Front cover loses PBR lighting** — ShaderMaterial on front face
+  doesn't respond to the scene's warm key light. Back/spine still
+  PBR-lit so overall tone is preserved. Monitor on a full shelf
+  (Phase 2); if discontinuity is visible, port CoverMaterial to
+  onBeforeCompile-patched meshStandardMaterial.
+- **useCoverTexture.ts deleted** — Replaced by coverPipeline.
+  Nothing else referenced it (grep-verified).
+- **DEV_TEST_COVER_URL hardcoded in BookshelfScene** — Remove in
+  Step 7 when the real add-book flow provides URLs from DB.
 ## Environment notes
 
 - **Dev**: GitHub Codespaces, Linux, case-sensitive

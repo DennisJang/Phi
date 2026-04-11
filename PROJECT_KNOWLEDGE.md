@@ -425,6 +425,9 @@ Affiliate codes are appended in Phase 4 after partnership approval — URL struc
   - Height : Width = φ : 1
   - Thickness = Width × (1/φ²) ≈ Width × 0.382
   - Thickness is **fixed** regardless of page count (consistency over realism)
+  > **Thickness exception (2026-04-11)**: In practice the formula
+> `width × 1/φ²` conflicts with the §9 spine-on camera silhouette.
+> Current implementation uses `BASE_SCALE × 0.25`. See Decisions Log.
 
 ### 6.2 Cover mapping pipeline (Phase 1 core)
 Three sources, one pipeline:
@@ -600,6 +603,9 @@ phi/
 | 2026-04-10 | Browser Supabase client becomes a singleton | Multiple `createBrowserClient()` instances fragment auth state (session, JWT) across instances, causing downstream calls to authenticate inconsistently. `lib/supabase/client.ts` now caches the first-constructed instance and returns it for all subsequent `createClient()` calls. Lazy construction preserves SSR-safety. |
 | 2026-04-10 | Two-layer upload validation: shallow (declared) + deep (sharp decode) | Step 4c accepts untrusted bytes. Client-declared Content-Type and size are not a security boundary — any malicious client can lie. The real validation is whether sharp can decode the bytes. Shallow layer (MIME allowlist + 5MB limit) exists only to fail honest mistakes cheaply. Magic-byte parsing is unnecessary because sharp does it more rigorously as part of decoding. This design generalizes to any future route that accepts binary input. |
 | 2026-04-10 | RLS is the source of truth for upload authorization, not application code | Once the `covers_user_insert_own_folder` policy was in place, the `/api/cover-upload` route deliberately does NOT re-check `path startsWith user_id` in TypeScript. The policy enforces it at the database level, and re-implementing the check in application code would create a place for the two definitions to drift. This pattern should be followed for any future RLS-scoped resource: the policy is authoritative, the application code must not duplicate it. |
+| 2026-04-11 | Book thickness decoupled from φ formula | §6.1 says thickness = width × 1/φ². At BASE_SCALE = 1.4 this gives 0.535, which reads as a brick under the §9 spine-on 15° yaw camera — spine stops being the dominant silhouette. thickness is now `BASE_SCALE × 0.25 = 0.350`, visual calibration. height:width = φ:1 preserved. Re-evaluate against full shelf in Phase 2. |
+| 2026-04-11 | Front cover uses ShaderMaterial (letterbox), back/spine stay meshStandardMaterial | Shader lets us composite a cover of any aspect ratio onto the 1:φ face with dominantColor letterbox in a single draw (Step 4e, §6.2 Q8-c verified). TRADEOFF: front face no longer receives PBR scene lighting. Back and spine still do, so overall scene tone is preserved. If the lighting discontinuity becomes visible on a full shelf, Phase 2 will port to `onBeforeCompile` patching of meshStandardMaterial. |
+| 2026-04-11 | dominantColor recomputed client-side via 4-corner sampling (mirror of server sharp logic) | Server returns dominantColor in /api/cover-* JSON, but we don't persist it until Step 7 (DB wiring). Until then, `coverPipeline.loadCoverFromUrl` re-extracts it from the same HTMLImageElement used for the THREE.Texture. Same 4×4 downscale + 4-corner average as server → results should agree within rounding, giving a free regression signal later. |
 ---
 
 ## 10. Development Workflow Rules

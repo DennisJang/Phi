@@ -29,6 +29,20 @@ import { PerfPanel } from './PerfPanel';
 import { SHELF_YAW_RAD, PHI } from '@/lib/phi/ratios';
 
 /**
+ * DEV-ONLY cover URL for Step 4e visual verification.
+ *
+ * This is a real cover processed through /api/cover-upload (Step 4c).
+ * It lives here (not in bookshelf/page.tsx) so the test value is
+ * isolated inside the scene and easy to remove in Step 7, when the
+ * real book-store-driven URLs replace it.
+ *
+ * TODO (Step 7): remove this constant and drive coverImageUrl from
+ * the books store / add-book flow.
+ */
+const DEV_TEST_COVER_URL =
+  'https://trbeccbsjnxdkzxlecvv.supabase.co/storage/v1/object/public/covers/561aa935-b76b-403d-a6a7-b98638620116/40c8d5cec3a6b5c3d7ed46a01eced3ef7353b6b7.webp';
+
+/**
  * Camera placement.
  *
  * Book center sits at (halfWidth, 0, 0) because BookModel's origin is the
@@ -94,10 +108,7 @@ export function BookshelfScene() {
       </Suspense>
 
       {/* The hero object in its base pose — no rotation applied */}
-      <BookModel
-        preset="hardcover"
-        coverImageUrl="https://picsum.photos/seed/phi-book-1/1024/1536"
-      />
+      <BookModel preset="hardcover" coverImageUrl={DEV_TEST_COVER_URL} />
 
       {/* Ground plane to receive shadows */}
       <mesh

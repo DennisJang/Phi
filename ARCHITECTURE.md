@@ -55,6 +55,7 @@ phi/
 │   │   ├── BookModel.tsx                 # procedural book geometry
 │   │   ├── BookshelfScene.tsx            # spine-on camera composition
 │   │   └── PerfPanel.tsx                 # dev-only FPS overlay
+│   │   ├── CoverMaterial.tsx             # Step 4e: letterbox shader
 │   ├── auth/                             # NEW (Step 4c)
 │   │   └── AnonymousBootstrap.tsx        # session bootstrap + Context
 │   └── ui/
@@ -77,7 +78,8 @@ phi/
 │   │   └── admin.ts                      # service_role client (4b)
 │   └── three/
 │       ├── materials.ts
-│       └── useCoverTexture.ts
+│       ├── bookDimensions.ts             # Step 4e: extracted from BookModel
+│       └──coverPipeline.ts              # Step 4e: URL → {texture, color, aspect}
 ├── supabase/
 │   └── migrations/
 │       ├── 20260410_000000_phi_redesign.sql
@@ -144,11 +146,12 @@ phi/
 | Home | `app/page.tsx` | Server | Landing page with Φ mark and entry link |
 | BookshelfPage | `app/(features)/bookshelf/page.tsx` | Server | Shelf route wrapper with retreating chrome |
 | BookshelfScene | `components/3d/BookshelfScene.tsx` | Client | R3F Canvas with spine-on camera (15° yaw, 0° pitch) |
-| BookModel | `components/3d/BookModel.tsx` | Client | Procedural book (4 meshes, spine hinge origin) |
+| BookModel | `components/3d/BookModel.tsx` | Client | Procedural book (4 meshes, spine hinge origin) |MODIFIED (Step 4e): CoverMaterial injection
 | PerfPanel | `components/3d/PerfPanel.tsx` | Client | Dev-only FPS overlay (r3f-perf) |
 | LandscapeGuard | `components/ui/LandscapeGuard.tsx` | Client | Portrait-mode overlay, unmounts children entirely |
 | **AnonymousBootstrap** | `components/auth/AnonymousBootstrap.tsx` | Client | **Session bootstrap on first mount; exposes `useAnonymousSession()` Context to descendants** |
 | **DevUploadPage** | `app/dev/upload/page.tsx` | Client | **Scratch form for 4c verification; delete at Phase 1 gate** |
+ CoverMaterial + bookDimensions
 
 ## Components registry (planned, Phase 1 target additions)
 
@@ -306,8 +309,10 @@ cache.
 | Shared image processing | `lib/image/processImage.ts` | Done (Step 4b, renamed 4c) |
 | **User upload pipeline** | `app/api/cover-upload/route.ts` | **Done (Step 4c)** |
 | Typographic cover generator | (Step 4d) | Not started |
-| Letterbox compositor | (Step 4e) | Not started |
+| Letterbox compositor | (Step 4e) | Done (Step 4e)
 | Spine generator | (Step 5) | Not started |
+| Cover pipeline adapter | `lib/three/coverPipeline.ts` | Done (Step 4e) |
+| Letterbox shader | `components/3d/CoverMaterial.tsx` | Done (Step 4e) |
 
 ---
 
