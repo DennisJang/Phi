@@ -1,21 +1,56 @@
 import Link from 'next/link';
 import { BookshelfScene } from '@/components/3d/BookshelfScene';
+import { createClient } from '@/lib/supabase/server';
+import type { Book } from '@/types/book';
 
 /**
  * Bookshelf page — hosts the 3D shelf view.
  *
+ * Server Component: fetches the authenticated user's books in
+ * shelf_order and passes them to BookshelfScene as a prop.
+ *
+ * RLS enforces user_id scoping at the database level; the explicit
+ * .eq('user_id', user.id) is defense-in-depth and expresses
+ * application intent alongside the policy. See §11.3.
+ *
+ * Empty states:
+ *  - user === null (pre-AnonymousBootstrap hydration): renders empty
+ *    shelf. Client-side anon sign-in completes on subsequent load.
+ *  - books.length === 0 (new user, no books yet): renders empty shelf.
+ *    Add-book affordance lands in Step 7 / Phase 2.
+ *
  * Background is delegated to app/layout.tsx's <body class="bg-canvas">.
- * This page only controls its own layout (full viewport, overflow hidden)
- * and the retreating chrome layer above the canvas.
+ * This page only controls its own layout and the retreating chrome
+ * layer above the canvas.
  *
  * See PROJECT_KNOWLEDGE.md §3.2 "Object-first, UI-second".
  */
-export default function BookshelfPage() {
+export default async function BookshelfPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let books: Book[] = [];
+  if (user) {
+    const { data, error } = await supabase
+      .from('books')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('shelf_order', { ascending: true });
+
+    if (error) {
+      console.error('[bookshelf] fetch failed:', error);
+    } else if (data) {
+      books = data as Book[];
+    }
+  }
+
   return (
     <main className="relative w-screen h-screen overflow-hidden">
       {/* The 3D canvas fills the viewport */}
       <div className="absolute inset-0">
-        <BookshelfScene />
+        <BookshelfScene books={books} />
       </div>
 
       {/* Minimal retreating chrome — top-left: back link */}
