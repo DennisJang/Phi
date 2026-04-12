@@ -34,39 +34,69 @@ function useCoverSample(url: string | undefined): CoverSample | null {
   return s;
 }
 
+/**
+ * Lightweight texture loader for spine textures (Step 5c).
+ * Unlike useCoverSample, no pixel sampling — the generator already
+ * produces a face-matched texture; we just need to bind it.
+ */
+function useSpineTexture(url: string | undefined): THREE.Texture | null {
+  const [tex, setTex] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!url) { setTex(null); return; }
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    loader.load(
+      url,
+      (next) => {
+        if (cancelled) { next.dispose(); return; }
+        next.colorSpace = THREE.SRGBColorSpace;
+        next.anisotropy = 8;
+        next.needsUpdate = true;
+        setTex((prev) => { prev?.dispose(); return next; });
+      },
+      undefined,
+      (e) => !cancelled && console.error('[BookModel/spine]', e),
+    );
+    return () => { cancelled = true; };
+  }, [url]);
+  useEffect(() => () => {
+    setTex((prev) => { prev?.dispose(); return null; });
+  }, []);
+  return tex;
+}
+
 export interface BookModelProps {
   preset?: MaterialPresetName;
   coverImageUrl?: string;
+  /** Generated spine texture URL (Step 5). Optional — falls back to solid color. */
+  spineImageUrl?: string;
   position?: [number, number, number];
   rotation?: [number, number, number];
 }
 
 export function BookModel({
-  preset = 'hardcover', coverImageUrl,
+  preset = 'hardcover', coverImageUrl, spineImageUrl,
   position = [0, 0, 0], rotation = [0, 0, 0],
 }: BookModelProps) {
   const presetProps = MATERIAL_PRESETS[preset];
   const cover = useCoverSample(coverImageUrl);
+  const spineTex = useSpineTexture(spineImageUrl);
   const paperNormal = useMemo(() => getPaperNormalTexture(), []);
 
-  // Cover slabs cover the full book W×H. Page block is inset on all
-  // non-spine sides (top/bottom/fore-edge) by PAGE_INSET, and squeezed
-  // in Z by COVER_THICKNESS on front+back.
   const frontGeo = useBox(W, H, COVER_THICKNESS);
   const backGeo = useBox(W, H, COVER_THICKNESS);
   const spineGeo = useBox(COVER_THICKNESS, H, T);
   const pageGeo = useBox(
-    W - COVER_THICKNESS - PAGE_INSET,     // spine(0.02) + fore-edge(0.03) removed
-    H - PAGE_INSET * 2,                    // top + bottom inset
+    W - COVER_THICKNESS - PAGE_INSET,
+    H - PAGE_INSET * 2,
     T - COVER_THICKNESS * 2
   );
 
   const halfT = T / 2;
   const coverZFront = halfT - COVER_THICKNESS / 2;
   const coverZBack = -halfT + COVER_THICKNESS / 2;
-  // Cover slabs centered in X at W/2 (origin at spine hinge).
   const coverX = W / 2;
-  // Page block: starts after spine thickness, ends PAGE_INSET before fore-edge.
   const pageX = COVER_THICKNESS + (W - COVER_THICKNESS - PAGE_INSET) / 2;
   const baseColor = cover?.coverBaseColor ?? new THREE.Color('#ffffff');
 
@@ -90,7 +120,11 @@ export function BookModel({
 
       <mesh geometry={spineGeo} position={[COVER_THICKNESS / 2, 0, 0]} castShadow receiveShadow>
         {cover ? (
-          <CoverMaterial face="spine" preset={presetProps} coverBaseColor={baseColor} />
+          <CoverMaterial
+            face="spine" preset={presetProps}
+            texture={spineTex ?? undefined}
+            coverBaseColor={baseColor}
+          />
         ) : <meshStandardMaterial {...presetProps} />}
       </mesh>
 
