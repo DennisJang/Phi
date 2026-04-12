@@ -38,3 +38,9 @@ next-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+# Project docs live in Claude project, not in repo
+STATUS.md
+ARCHITECTURE.md
+HISTORY.md
+LEARNINGS.md
+PROJECT_KNOWLEDGE.md
