@@ -21,11 +21,10 @@ const nextConfig = {
     serverComponentsExternalPackages: ['sharp', '@napi-rs/canvas'],
 
     // outputFileTracingIncludes ships additional files to each route's
-    // Vercel serverless function. Both cover-generate (Step 4d) and
-    // spine-generate (Step 5b) use @napi-rs/canvas to render PNG with
-    // Noto Serif/Sans KR. The font files live outside node_modules so
-    // Next.js's automatic tracer misses them — we must declare them
-    // explicitly per route.
+    // Vercel serverless function. Routes that use @napi-rs/canvas to
+    // render PNG with Noto Serif/Sans KR need the font files declared
+    // explicitly — they live outside node_modules so the automatic
+    // tracer misses them.
     //
     // Caution: JS object literals silently keep only the last value for
     // duplicate keys. Never use the same route path twice here — each
@@ -34,6 +33,7 @@ const nextConfig = {
     outputFileTracingIncludes: {
       '/api/cover-generate': ['./assets/fonts/**/*'],
       '/api/spine-generate': ['./assets/fonts/**/*'],
+      '/api/books/create-from-metadata': ['./assets/fonts/**/*'],
     },
   },
 };
