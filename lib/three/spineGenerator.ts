@@ -64,7 +64,7 @@ const END_REGION_RATIO = (1 - TITLE_REGION_RATIO) / 2; // 0.191
  * - Latin glyphs are monolithic and survive downsampling better.
  */
 const TITLE_FONT_SIZE: Record<SpineLanguage, number> = { ko: 32, en: 22 };
-const AUTHOR_FONT_SIZE: Record<SpineLanguage, number> = { ko: 16, en: 14 };
+const AUTHOR_FONT_SIZE: Record<SpineLanguage, number> = { ko: 22, en: 18 };
 const LOGO_FONT_SIZE = 72;
 
 const TITLE_WEIGHT: Record<SpineLanguage, number> = { ko: 600, en: 500 };
