@@ -5,6 +5,9 @@
  * ---------
  * 1. ISBN preference: isbn13 > isbn > null. ISBN-13 is the modern
  *    standard and Aladin provides it for virtually all current books.
+ *    Aladin returns internal product codes (e.g. "SET99999") in the
+ *    isbn field for bundled/set products; we accept only canonical
+ *    10- or 13-digit strings after stripping hyphens/spaces.
  * 2. Author cleanup: Aladin authors frequently look like
  *    "홍길동 (지은이), 김철수 (옮긴이)". We strip any "(…)" annotations
  *    but preserve the comma-separated names. Filtering to primary
@@ -20,28 +23,55 @@
  *    it via fetchRemoteImage when the user picks this item.
  * 6. Source link: Aladin's `link` field points at the product page,
  *    which doubles as the TTB "view details / buy" target required
- *    by the API terms.
+ *    by the API terms. Aladin TTB was XML-first and still emits
+ *    HTML-encoded ampersands (&amp;) inside JSON responses — we
+ *    reverse the entity encoding at the normalization boundary so
+ *    downstream consumers get a browser-ready URL.
  */
 
 import type { AladinItem } from './schema';
 import type { BookMetadata, BookLanguage } from '@/types/metadata';
 
 export function normalizeAladinItem(item: AladinItem): BookMetadata {
-  const rawIsbn = (item.isbn13?.trim() || item.isbn?.trim() || '').replace(/[- ]/g, '');
-  const isbn = rawIsbn.length >= 10 ? rawIsbn : null;
-
   return {
     source: 'aladin',
     sourceItemId: String(item.itemId),
-    isbn,
+    isbn: normalizeIsbn(item.isbn13 ?? item.isbn),
     title: item.title.trim(),
     author: cleanAuthor(item.author),
     publisher: item.publisher.trim() || null,
     publishedYear: parseYear(item.pubDate),
     language: inferLanguage(item.categoryName),
     coverOriginalUrl: item.cover.trim() || null,
-    sourceLink: item.link.trim() || null,
+    sourceLink: decodeHtmlEntities(item.link.trim()) || null,
   };
+}
+
+/**
+ * Accept only canonical ISBN-10 or ISBN-13 digit strings after stripping
+ * hyphens and spaces. Rejects Aladin's internal set-product codes like
+ * "SET12345678" which fail the digits-only test. Returns null for anything
+ * non-conforming; downstream consumers treat isbn as optional.
+ */
+function normalizeIsbn(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const stripped = raw.trim().replace(/[- ]/g, '');
+  return /^\d{10}(\d{3})?$/.test(stripped) ? stripped : null;
+}
+
+/**
+ * Reverse HTML entity encoding that Aladin TTB leaves in JSON-serialized
+ * URLs. Scope is intentionally narrow: only the five entities Aladin is
+ * known to emit. A general-purpose HTML decoder would be overkill and
+ * would introduce a dependency for a one-regex problem.
+ */
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
 }
 
 function cleanAuthor(raw: string): string {
