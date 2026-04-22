@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { BookshelfScene } from '@/components/3d/BookshelfScene';
 import { createClient } from '@/lib/supabase/server';
+import { createServerRepositories } from '@/lib/repository/server';
 import type { Book } from '@/types/book';
 
 /**
@@ -33,16 +34,11 @@ export default async function BookshelfPage() {
 
   let books: Book[] = [];
   if (user) {
-    const { data, error } = await supabase
-      .from('books')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('shelf_order', { ascending: true });
-
-    if (error) {
-      console.error('[bookshelf] fetch failed:', error);
-    } else if (data) {
-      books = data as Book[];
+    const { books: booksRepo } = await createServerRepositories();
+    try {
+      books = await booksRepo.findByUser(user.id);
+    } catch (err) {
+      console.error('[bookshelf] fetch failed:', err);
     }
   }
 
