@@ -47,3 +47,6 @@ PROJECT_KNOWLEDGE.md
 
 # Claude Code context (local-only mirror of Claude project docs)
 .claude/
+
+# experimental scratch
+tmp/
