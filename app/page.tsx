@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { HeroQuote } from '@/components/hero/HeroQuote';
 
 /**
  * Landing page — the entry to Phi.
@@ -11,7 +12,7 @@ import Link from 'next/link';
  */
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4">
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 py-phi-loose">
       {/* Warm spotlight glow — subtle radial behind the title */}
       <div
         className="absolute w-[600px] h-[600px] rounded-full opacity-[0.04] pointer-events-none bg-[radial-gradient(circle,#D4A574_0%,transparent_70%)]"
@@ -37,6 +38,9 @@ export default function Home() {
         >
           Enter the shelf
         </Link>
+
+        {/* Daily heading quote — deterministic per anonymous id */}
+        <HeroQuote />
       </div>
     </main>
   );
