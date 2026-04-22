@@ -44,3 +44,6 @@ ARCHITECTURE.md
 HISTORY.md
 LEARNINGS.md
 PROJECT_KNOWLEDGE.md
+
+# Claude Code context (local-only mirror of Claude project docs)
+.claude/
