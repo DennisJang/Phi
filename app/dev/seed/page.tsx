@@ -136,7 +136,7 @@ export default function DevSeedPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui, sans-serif', maxWidth: 900 }}>
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Dev Seed — Reset & Reseed Dennis's Shelf</h1>
+      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Dev Seed — Reset & Reseed Dennis&apos;s Shelf</h1>
       <p style={{ color: '#888', marginBottom: 20, fontSize: 13 }}>
         This wipes ALL books owned by DEV_FIXED_USER_ID, then inserts the manifest entries.
         The /api/dev/seed route is dev-only (NODE_ENV gate) — in prod, the action silently 404s.

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { createServerRepositories } from '@/lib/repository/server';
+import type { BookRepository } from '@/lib/repository/books';
 import { processImage } from '@/lib/image/processImage';
 import { hashImageBytes } from '@/lib/image/hash';
 import { renderSpine } from '@/lib/three/spineGenerator';
@@ -191,24 +193,41 @@ export async function POST(request: Request): Promise<NextResponse> {
     coversByName.set(file.name, file);
   }
 
-  // Wipe Dennis's existing books. RLS allows the delete because the
-  // cookie-bound client is authenticated as userId and the policy scopes
-  // to user_id = auth.uid(). FK cascades handle book_pages, saved_books,
-  // and notifications.
-  const { data: wipedRows, error: wipeErr } = await supabase
-    .from('books')
-    .delete()
-    .eq('user_id', userId)
-    .select('id');
+  // Domain data access goes through the repository; auth above and
+  // storage inside seedOneBook stay on the direct client for now
+  // (Step 6.5 scopes the boundary to data access only).
+  const { books: booksRepo, shelves: shelvesRepo } =
+    await createServerRepositories();
 
-  if (wipeErr) {
+  // Resolve the insert-target shelf up front; a missing default
+  // library shelf means the profile bootstrap trigger has not run
+  // and the seed cannot proceed.
+  const defaultShelf = await shelvesRepo.findDefaultLibraryByUser(userId);
+  if (!defaultShelf) {
     return errorResponse(
       500,
-      'wipe_failed',
-      `Failed to clear prior books: ${wipeErr.message}`,
+      'default_shelf_missing',
+      'User has no default library shelf; cannot seed books',
     );
   }
-  const deletedPriorCount = wipedRows?.length ?? 0;
+
+  // Soft-wipe Dennis's existing books. The repository sets deleted_at
+  // on every live row; subsequent findByUser calls filter them out.
+  // Storage objects are content-addressed by sha1 and left untouched;
+  // Phase 2 Storage GC will reclaim dangling WebPs.
+  const priorBooks = await booksRepo.findByUser(userId);
+  const deletedPriorCount = priorBooks.length;
+  if (deletedPriorCount > 0) {
+    try {
+      await booksRepo.deleteAllByUser(userId);
+    } catch (err) {
+      return errorResponse(
+        500,
+        'wipe_failed',
+        err instanceof Error ? err.message : 'failed to clear prior books',
+      );
+    }
+  }
 
   // Per-book pipeline.
   const succeeded: SuccessfulBook[] = [];
@@ -222,8 +241,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         index: i,
         shelfOrder: i,
         userId,
+        shelfId: defaultShelf.id,
         coversByName,
         supabase,
+        booksRepo,
       });
 
       if (result.ok) {
@@ -266,8 +287,10 @@ interface SeedOneInput {
   index: number;
   shelfOrder: number;
   userId: string;
+  shelfId: string;
   coversByName: Map<string, File>;
   supabase: Awaited<ReturnType<typeof createClient>>;
+  booksRepo: BookRepository;
 }
 
 type SeedOneResult =
@@ -275,7 +298,7 @@ type SeedOneResult =
   | { ok: false; error: { kind: string; message: string } };
 
 async function seedOneBook(input: SeedOneInput): Promise<SeedOneResult> {
-  const { entry, index, shelfOrder, userId, coversByName, supabase } = input;
+  const { entry, index, shelfOrder, userId, shelfId, coversByName, supabase, booksRepo } = input;
 
   const coverFile = coversByName.get(entry.coverFilename);
   if (!coverFile) {
@@ -409,34 +432,32 @@ async function seedOneBook(input: SeedOneInput): Promise<SeedOneResult> {
 
   const { data: spinePublicUrl } = supabase.storage.from(BUCKET).getPublicUrl(spinePath);
 
-  const { data: insertedRows, error: insertErr } = await supabase
-    .from('books')
-    .insert({
-      user_id: userId,
+  let insertedBook;
+  try {
+    insertedBook = await booksRepo.create({
+      userId,
+      shelfId,
       title: entry.title,
       author: entry.author,
       language: entry.language,
       isbn: entry.isbn ?? null,
       publisher: entry.publisher ?? null,
-      published_year: entry.publishedYear ?? null,
+      publishedYear: entry.publishedYear ?? null,
       source: 'manual',
-      cover_source: 'user_upload',
-      cover_image_url: coverPublicUrl.publicUrl,
-      cover_storage_path: coverPath,
-      cover_dominant_color: coverData.dominantColor,
-      spine_image_url: spinePublicUrl.publicUrl,
-      spine_storage_path: spinePath,
-      shelf_order: shelfOrder,
-    })
-    .select('id')
-    .single();
-
-  if (insertErr || !insertedRows) {
+      coverSource: 'user_upload',
+      coverImageUrl: coverPublicUrl.publicUrl,
+      coverStoragePath: coverPath,
+      coverDominantColor: coverData.dominantColor,
+      spineImageUrl: spinePublicUrl.publicUrl,
+      spineStoragePath: spinePath,
+      shelfOrder,
+    });
+  } catch (err) {
     return {
       ok: false,
       error: {
         kind: 'books_insert_failed',
-        message: insertErr?.message ?? 'insert returned no row',
+        message: err instanceof Error ? err.message : 'insert failed',
       },
     };
   }
@@ -445,7 +466,7 @@ async function seedOneBook(input: SeedOneInput): Promise<SeedOneResult> {
     ok: true,
     book: {
       index,
-      bookId: insertedRows.id,
+      bookId: insertedBook.id,
       title: entry.title,
       coverUrl: coverPublicUrl.publicUrl,
       spineUrl: spinePublicUrl.publicUrl,

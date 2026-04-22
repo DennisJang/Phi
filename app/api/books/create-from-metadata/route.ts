@@ -54,10 +54,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { createServerRepositories } from '@/lib/repository/server';
 import { fetchRemoteImage } from '@/lib/image/fetchRemoteImage';
 import { processImage } from '@/lib/image/processImage';
 import { hashImageBytes } from '@/lib/image/hash';
 import { renderSpine } from '@/lib/three/spineGenerator';
+import type { BookSource, CoverSource } from '@/types/book';
 import type { MetadataSource } from '@/types/metadata';
 
 export const runtime = 'nodejs';
@@ -215,52 +217,62 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const { data: spineUrlData } = supabase.storage.from(BUCKET).getPublicUrl(spinePath);
 
-  // 11. Determine next shelf_order (append to end)
-  const { data: maxRow, error: maxErr } = await supabase
-    .from('books')
-    .select('shelf_order')
-    .eq('user_id', userId)
-    .order('shelf_order', { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  if (maxErr) {
-    return errResponse(500, 'shelf_order_query_failed', maxErr.message);
-  }
-  const nextShelfOrder = (maxRow?.shelf_order ?? -1) + 1;
+  // 11. Resolve the user's default library shelf (insert target) and
+  //     determine next shelf_order. Both go through the repository;
+  //     auth and storage above stay on the direct client.
+  const { books: booksRepo, shelves: shelvesRepo } =
+    await createServerRepositories();
 
-  // 12. INSERT books row
-  const { data: inserted, error: insertErr } = await supabase
-    .from('books')
-    .insert({
-      user_id: userId,
+  const defaultShelf = await shelvesRepo.findDefaultLibraryByUser(userId);
+  if (!defaultShelf) {
+    return errResponse(
+      500,
+      'default_shelf_missing',
+      'User has no default library shelf; profile trigger may not have run',
+    );
+  }
+
+  // The domain API folds the "append to end" convention inside the
+  // route; a future Step 7 redesign may drop shelf_order for
+  // added_to_shelf_at ordering entirely.
+  const existing = await booksRepo.findByUser(userId);
+  const maxShelfOrder = existing.reduce(
+    (acc, b) => (b.shelf_order !== null && b.shelf_order > acc ? b.shelf_order : acc),
+    -1,
+  );
+  const nextShelfOrder = maxShelfOrder + 1;
+
+  // 12. INSERT via repository
+  let inserted;
+  try {
+    inserted = await booksRepo.create({
+      userId,
+      shelfId: defaultShelf.id,
       title: metadata.title,
       author: metadata.author,
-      language: metadata.language,
       isbn: metadata.isbn,
       publisher: metadata.publisher,
-      published_year: metadata.publishedYear,
+      publishedYear: metadata.publishedYear,
+      language: metadata.language,
+      coverImageUrl: coverUrlData.publicUrl,
+      coverStoragePath: coverPath,
+      coverDominantColor: cover.dominantColor,
+      coverSource: mapCoverSourceToDb(metadata.source),
+      spineImageUrl: spineUrlData.publicUrl,
+      spineStoragePath: spinePath,
+      shelfOrder: nextShelfOrder,
       source: mapSourceToDb(metadata.source),
-      cover_source: mapCoverSourceToDb(metadata.source),
-      cover_image_url: coverUrlData.publicUrl,
-      cover_storage_path: coverPath,
-      cover_dominant_color: cover.dominantColor,
-      spine_image_url: spineUrlData.publicUrl,
-      spine_storage_path: spinePath,
-      shelf_order: nextShelfOrder,
-      // Preserve source-specific fields for Phase 2 dedup + re-fetch.
-      // JSONB keeps this future-proof without new columns per source.
+      // JSONB preserves source-specific fields for Phase 2 dedup + re-fetch.
       metadata: {
         sourceItemId: metadata.sourceItemId,
         sourceLink: metadata.sourceLink,
       },
-    })
-    .select('id')
-    .single();
-  if (insertErr || !inserted) {
+    });
+  } catch (err) {
     return errResponse(
       500,
       'books_insert_failed',
-      insertErr?.message ?? 'insert returned no row',
+      err instanceof Error ? err.message : 'insert failed',
     );
   }
 
@@ -280,7 +292,7 @@ export async function POST(request: Request): Promise<NextResponse> {
  * BookMetadata.source -> books.source value.
  * Phase 2 will exercise 'google_books' and 'manual' branches.
  */
-function mapSourceToDb(source: MetadataSource): string {
+function mapSourceToDb(source: MetadataSource): BookSource {
   switch (source) {
     case 'aladin':
       return 'aladin_api';
@@ -298,14 +310,15 @@ function mapSourceToDb(source: MetadataSource): string {
  * {'aladin_url', 'user_upload', 'typographic_generated'}. Adding
  * Google Books support means a migration that extends the set to
  * include 'google_books_url'. Until then, the source gate in POST()
- * rejects google_books before it reaches INSERT.
+ * rejects google_books before it reaches INSERT; the 'google_books_url'
+ * branch below is cast-to-CoverSource in anticipation of that migration.
  */
-function mapCoverSourceToDb(source: MetadataSource): string {
+function mapCoverSourceToDb(source: MetadataSource): CoverSource {
   switch (source) {
     case 'aladin':
       return 'aladin_url';
     case 'google_books':
-      return 'google_books_url';
+      return 'google_books_url' as CoverSource;
     case 'manual':
       return 'user_upload';
   }

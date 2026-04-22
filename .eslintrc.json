@@ -1,0 +1,28 @@
+{
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@supabase/supabase-js",
+            "message": "Import domain repositories from @/lib/repository/* instead of the Supabase SDK directly."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["@/lib/supabase/repositories/*"],
+            "message": "Import the wired repositories from @/lib/repository/{browser,server,admin} instead of the adapter directly."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["lib/supabase/**/*.ts", "lib/repository/**/*.ts"],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ]
+}
