@@ -34,13 +34,22 @@ function rowToIntent(row: IntentRow): Intent {
   };
 }
 
-/**
- * Stub adapter for PR2. PR3 expands with state-machine helpers
- * (transitionState, appendProgress, findByIdempotencyKey).
- */
 export function createIntentRepository(
   supabase: SupabaseClient<Database>,
 ): IntentRepository {
+  async function returnSingle(
+    promise: PromiseLike<{ data: IntentRow | null; error: { message: string } | null }>,
+    label: string,
+  ): Promise<Intent> {
+    const { data, error } = await promise;
+    if (error || !data) {
+      throw new Error(
+        `[${label}] ${error?.message ?? 'update returned no row'}`,
+      );
+    }
+    return rowToIntent(data);
+  }
+
   return {
     async create(input: CreateIntentInput): Promise<Intent> {
       const insertRow: IntentInsertRow = {
@@ -79,6 +88,89 @@ export function createIntentRepository(
         throw new Error(`[intentRepository.findById] ${error.message}`);
       }
       return data ? rowToIntent(data) : null;
+    },
+
+    async findByIdempotencyKey(
+      actorId: string,
+      kind: IntentKind,
+      idempotencyKey: string,
+    ): Promise<Intent | null> {
+      const { data, error } = await supabase
+        .from('intents')
+        .select(INTENT_COLUMNS)
+        .eq('actor_id', actorId)
+        .eq('kind', kind)
+        .eq('idempotency_key', idempotencyKey)
+        .is('completed_at', null)
+        .returns<IntentRow[]>()
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(
+          `[intentRepository.findByIdempotencyKey] ${error.message}`,
+        );
+      }
+      return data ? rowToIntent(data) : null;
+    },
+
+    async transitionState(id: string, newState: IntentState): Promise<Intent> {
+      return returnSingle(
+        supabase
+          .from('intents')
+          .update({
+            state: newState,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id)
+          .select(INTENT_COLUMNS)
+          .returns<IntentRow[]>()
+          .single(),
+        'intentRepository.transitionState',
+      );
+    },
+
+    async completeWithResult(
+      id: string,
+      result: Record<string, unknown>,
+    ): Promise<Intent> {
+      const now = new Date().toISOString();
+      return returnSingle(
+        supabase
+          .from('intents')
+          .update({
+            state: 'succeeded',
+            result: result as IntentInsertRow['result'],
+            completed_at: now,
+            updated_at: now,
+          })
+          .eq('id', id)
+          .select(INTENT_COLUMNS)
+          .returns<IntentRow[]>()
+          .single(),
+        'intentRepository.completeWithResult',
+      );
+    },
+
+    async completeWithError(
+      id: string,
+      error: Record<string, unknown>,
+    ): Promise<Intent> {
+      const now = new Date().toISOString();
+      return returnSingle(
+        supabase
+          .from('intents')
+          .update({
+            state: 'failed',
+            error: error as IntentInsertRow['error'],
+            completed_at: now,
+            updated_at: now,
+          })
+          .eq('id', id)
+          .select(INTENT_COLUMNS)
+          .returns<IntentRow[]>()
+          .single(),
+        'intentRepository.completeWithError',
+      );
     },
   };
 }
