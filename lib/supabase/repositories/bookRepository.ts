@@ -3,10 +3,10 @@ import type { Database } from '@/types/database';
 import type {
   Book,
   BookLanguage,
+  BookSection,
   BookSource,
   CoverSource,
   CreateBookInput,
-  ReadingStatus,
 } from '@/types/book';
 import type { BookRepository } from '@/lib/repository/books';
 
@@ -20,95 +20,87 @@ import type { BookRepository } from '@/lib/repository/books';
 type BookRow = Database['public']['Tables']['books']['Row'];
 type BookInsertRow = Database['public']['Tables']['books']['Insert'];
 
-const BOOK_COLUMNS =
-  'id, user_id, shelf_id, title, author, isbn, publisher, published_year, ' +
-  'total_pages, language, cover_image_url, cover_storage_path, ' +
-  'cover_dominant_color, cover_source, spine_image_url, spine_storage_path, ' +
-  'shelf_order, section_label, is_section_start, reading_status, is_featured, ' +
-  'one_liner, memo, added_to_shelf_at, started_reading_at, completed_at, ' +
-  'created_at, updated_at, deleted_at, added_location, added_weather, ' +
-  'added_timezone, source, metadata';
+const COVER_BUCKET = 'covers';
 
-function rowToBook(row: BookRow): Book {
+const BOOK_COLUMNS =
+  'id, user_id, title, author, isbn, publisher, published_year, language, ' +
+  'cover_source, cover_dominant_color, cover_sha1, was_cover_fallback, ' +
+  'spine_image_url, spine_storage_path, ' +
+  'section, source, source_id, intent_id, bookmark_count, ' +
+  'created_at, updated_at, deleted_at';
+
+function rowToBook(
+  row: BookRow,
+  supabase: SupabaseClient<Database>,
+): Book {
+  // cover_image_url is derived from cover_sha1 + the covers bucket
+  // path convention `{userId}/{sha1}.webp`. The adapter is the only
+  // layer that knows about the bucket; downstream code reads
+  // book.cover_image_url like any other field.
+  const coverImageUrl = row.cover_sha1
+    ? supabase.storage
+        .from(COVER_BUCKET)
+        .getPublicUrl(`${row.user_id}/${row.cover_sha1}.webp`).data.publicUrl
+    : null;
+
   return {
     id: row.id,
     user_id: row.user_id,
-    shelf_id: row.shelf_id,
 
     title: row.title,
     author: row.author,
     isbn: row.isbn,
     publisher: row.publisher,
     published_year: row.published_year,
-    total_pages: row.total_pages,
-    // DB CHECK restricts to 'ko'|'en'; cast at the boundary
-    language: (row.language ?? 'ko') as BookLanguage,
+    language: row.language as BookLanguage | null,
 
-    cover_image_url: row.cover_image_url,
-    cover_storage_path: row.cover_storage_path,
-    cover_dominant_color: row.cover_dominant_color,
     cover_source: row.cover_source as CoverSource | null,
+    cover_dominant_color: row.cover_dominant_color,
+    cover_sha1: row.cover_sha1,
+    was_cover_fallback: row.was_cover_fallback,
+    cover_image_url: coverImageUrl,
 
     spine_image_url: row.spine_image_url,
     spine_storage_path: row.spine_storage_path,
 
-    shelf_order: row.shelf_order,
-    section_label: row.section_label,
-    is_section_start: row.is_section_start ?? false,
-
-    reading_status: row.reading_status as ReadingStatus,
-    is_featured: row.is_featured,
-    one_liner: row.one_liner,
-    memo: row.memo,
-
-    added_to_shelf_at: row.added_to_shelf_at,
-    started_reading_at: row.started_reading_at,
-    completed_at: row.completed_at,
-    // DB columns are non-null in practice for any row we read, but
-    // typed nullable by the generator; fall back to empty string is
-    // wrong, so surface the raw value and let the type mirror DB.
-    created_at: row.created_at ?? '',
-    updated_at: row.updated_at ?? '',
-    deleted_at: row.deleted_at,
-
-    added_location: row.added_location as Record<string, unknown> | null,
-    added_weather: row.added_weather as Record<string, unknown> | null,
-    added_timezone: row.added_timezone,
-
+    section: row.section as BookSection,
     source: row.source as BookSource | null,
-    metadata: row.metadata as Record<string, unknown> | null,
+    source_id: row.source_id,
+    intent_id: row.intent_id,
+    bookmark_count: row.bookmark_count,
+
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deleted_at: row.deleted_at,
   };
 }
 
 function inputToInsertRow(input: CreateBookInput): BookInsertRow {
   const row: BookInsertRow = {
     user_id: input.userId,
-    shelf_id: input.shelfId,
     title: input.title,
     author: input.author,
     isbn: input.isbn,
     publisher: input.publisher,
     published_year: input.publishedYear,
     language: input.language,
-    cover_image_url: input.coverImageUrl,
-    cover_storage_path: input.coverStoragePath,
-    cover_dominant_color: input.coverDominantColor,
+
     cover_source: input.coverSource,
+    cover_dominant_color: input.coverDominantColor,
+    cover_sha1: input.coverSha1,
+
     spine_image_url: input.spineImageUrl,
     spine_storage_path: input.spineStoragePath,
+
     source: input.source,
   };
 
-  if (input.shelfOrder !== undefined) row.shelf_order = input.shelfOrder;
-  if (input.sectionLabel !== undefined) row.section_label = input.sectionLabel;
-  if (input.readingStatus !== undefined) row.reading_status = input.readingStatus;
-  if (input.isFeatured !== undefined) row.is_featured = input.isFeatured;
-  if (input.oneLiner !== undefined) row.one_liner = input.oneLiner;
-  if (input.memo !== undefined) row.memo = input.memo;
-  if (input.metadata !== undefined) {
-    // Json column — writing through as the database-layer helper accepts
-    row.metadata = input.metadata as BookInsertRow['metadata'];
+  if (input.section !== undefined) row.section = input.section;
+  if (input.wasCoverFallback !== undefined) {
+    row.was_cover_fallback = input.wasCoverFallback;
   }
+  if (input.sourceId !== undefined) row.source_id = input.sourceId;
+  if (input.intentId !== undefined) row.intent_id = input.intentId;
 
   return row;
 }
@@ -123,13 +115,13 @@ export function createBookRepository(
         .select(BOOK_COLUMNS)
         .eq('user_id', userId)
         .is('deleted_at', null)
-        .order('added_to_shelf_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .returns<BookRow[]>();
 
       if (error) {
         throw new Error(`[bookRepository.findByUser] ${error.message}`);
       }
-      return (data ?? []).map(rowToBook);
+      return (data ?? []).map((row) => rowToBook(row, supabase));
     },
 
     async create(input: CreateBookInput): Promise<Book> {
@@ -145,7 +137,7 @@ export function createBookRepository(
           `[bookRepository.create] ${error?.message ?? 'insert returned no row'}`,
         );
       }
-      return rowToBook(data);
+      return rowToBook(data, supabase);
     },
 
     async deleteAllByUser(userId: string): Promise<void> {

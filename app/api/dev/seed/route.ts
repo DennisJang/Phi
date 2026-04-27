@@ -194,22 +194,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   // Domain data access goes through the repository; auth above and
-  // storage inside seedOneBook stay on the direct client for now
-  // (Step 6.5 scopes the boundary to data access only).
-  const { books: booksRepo, shelves: shelvesRepo } =
-    await createServerRepositories();
-
-  // Resolve the insert-target shelf up front; a missing default
-  // library shelf means the profile bootstrap trigger has not run
-  // and the seed cannot proceed.
-  const defaultShelf = await shelvesRepo.findDefaultLibraryByUser(userId);
-  if (!defaultShelf) {
-    return errorResponse(
-      500,
-      'default_shelf_missing',
-      'User has no default library shelf; cannot seed books',
-    );
-  }
+  // storage inside seedOneBook stay on the direct client for now.
+  // Phi 2.0 dropped the shelves table; books are no longer contained
+  // in a per-shelf row.
+  const { books: booksRepo } = await createServerRepositories();
 
   // Soft-wipe Dennis's existing books. The repository sets deleted_at
   // on every live row; subsequent findByUser calls filter them out.
@@ -239,9 +227,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const result = await seedOneBook({
         entry,
         index: i,
-        shelfOrder: i,
         userId,
-        shelfId: defaultShelf.id,
         coversByName,
         supabase,
         booksRepo,
@@ -285,9 +271,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 interface SeedOneInput {
   entry: ManifestEntry;
   index: number;
-  shelfOrder: number;
   userId: string;
-  shelfId: string;
   coversByName: Map<string, File>;
   supabase: Awaited<ReturnType<typeof createClient>>;
   booksRepo: BookRepository;
@@ -298,7 +282,7 @@ type SeedOneResult =
   | { ok: false; error: { kind: string; message: string } };
 
 async function seedOneBook(input: SeedOneInput): Promise<SeedOneResult> {
-  const { entry, index, shelfOrder, userId, shelfId, coversByName, supabase, booksRepo } = input;
+  const { entry, index, userId, coversByName, supabase, booksRepo } = input;
 
   const coverFile = coversByName.get(entry.coverFilename);
   if (!coverFile) {
@@ -436,7 +420,6 @@ async function seedOneBook(input: SeedOneInput): Promise<SeedOneResult> {
   try {
     insertedBook = await booksRepo.create({
       userId,
-      shelfId,
       title: entry.title,
       author: entry.author,
       language: entry.language,
@@ -445,12 +428,11 @@ async function seedOneBook(input: SeedOneInput): Promise<SeedOneResult> {
       publishedYear: entry.publishedYear ?? null,
       source: 'manual',
       coverSource: 'user_upload',
-      coverImageUrl: coverPublicUrl.publicUrl,
-      coverStoragePath: coverPath,
       coverDominantColor: coverData.dominantColor,
+      coverSha1: coverHash,
+      wasCoverFallback: false,
       spineImageUrl: spinePublicUrl.publicUrl,
       spineStoragePath: spinePath,
-      shelfOrder,
     });
   } catch (err) {
     return {

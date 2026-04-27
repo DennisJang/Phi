@@ -2,10 +2,12 @@
  * Phi System — Block Type Definitions
  *
  * Defines the 7 allowed block types that make up a book page's content.
- * This is the JSON schema contract for `book_pages.content` in the database.
  *
- * Editor UI (Phase 3) reads from this file. No block type outside this set
- * may ever be persisted. No field outside the constrained enums may be set.
+ * Phase 3 editor surface; no DB-backed table holds these blocks today
+ * (the prior `book_pages` table was dropped during the Phi 2.0
+ * Stage 1 refactor). When the editor lands, persistence will be
+ * decided alongside the storage shape — this file documents the
+ * frozen content schema in the meantime.
  *
  * See PROJECT_KNOWLEDGE.md §18.2 "Constraint boundaries".
  */
