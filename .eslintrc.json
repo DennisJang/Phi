@@ -8,6 +8,10 @@
           {
             "name": "@supabase/supabase-js",
             "message": "Import domain repositories from @/lib/repository/* instead of the Supabase SDK directly."
+          },
+          {
+            "name": "@/lib/repository/admin",
+            "message": "Service-role data access goes through @/lib/intents/server-batch only."
           }
         ],
         "patterns": [
@@ -21,7 +25,15 @@
   },
   "overrides": [
     {
-      "files": ["lib/supabase/**/*.ts", "lib/repository/**/*.ts"],
+      "files": [
+        "lib/supabase/**/*.ts",
+        "lib/repository/**/*.ts",
+        "lib/storage/**/*.ts"
+      ],
+      "rules": { "no-restricted-imports": "off" }
+    },
+    {
+      "files": ["lib/intents/server-batch.ts"],
       "rules": { "no-restricted-imports": "off" }
     }
   ]

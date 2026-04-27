@@ -6,11 +6,13 @@ import { createProfileRepository } from '@/lib/supabase/repositories/profileRepo
 import { createBookmarkRepository } from '@/lib/supabase/repositories/bookmarkRepository';
 import { createShelfAffinityRepository } from '@/lib/supabase/repositories/shelfAffinityRepository';
 import { createIntentRepository } from '@/lib/supabase/repositories/intentRepository';
+import { createTierLimitRepository } from '@/lib/supabase/repositories/tierLimitRepository';
 import type { BookRepository } from '@/lib/repository/books';
 import type { ProfileRepository } from '@/lib/repository/profiles';
 import type { BookmarkRepository } from '@/lib/repository/bookmarks';
 import type { ShelfAffinityRepository } from '@/lib/repository/shelfAffinities';
 import type { IntentRepository } from '@/lib/repository/intents';
+import type { TierLimitRepository } from '@/lib/repository/tierLimits';
 
 export interface ServerRepositories {
   books: BookRepository;
@@ -18,6 +20,7 @@ export interface ServerRepositories {
   bookmarks: BookmarkRepository;
   shelfAffinities: ShelfAffinityRepository;
   intents: IntentRepository;
+  tierLimits: TierLimitRepository;
 }
 
 /**
@@ -34,5 +37,6 @@ export async function createServerRepositories(): Promise<ServerRepositories> {
     bookmarks: createBookmarkRepository(supabase),
     shelfAffinities: createShelfAffinityRepository(supabase),
     intents: createIntentRepository(supabase),
+    tierLimits: createTierLimitRepository(supabase),
   };
 }

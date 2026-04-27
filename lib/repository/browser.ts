@@ -6,6 +6,7 @@ import { createProfileRepository } from '@/lib/supabase/repositories/profileRepo
 import { createBookmarkRepository } from '@/lib/supabase/repositories/bookmarkRepository';
 import { createShelfAffinityRepository } from '@/lib/supabase/repositories/shelfAffinityRepository';
 import { createIntentRepository } from '@/lib/supabase/repositories/intentRepository';
+import { createTierLimitRepository } from '@/lib/supabase/repositories/tierLimitRepository';
 
 /**
  * Browser-side wired repositories.
@@ -30,3 +31,4 @@ export const shelfAffinityRepository = createShelfAffinityRepository(
   browserSupabase(),
 );
 export const intentRepository = createIntentRepository(browserSupabase());
+export const tierLimitRepository = createTierLimitRepository(browserSupabase());
