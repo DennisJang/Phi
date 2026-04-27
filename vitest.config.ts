@@ -16,9 +16,6 @@ export default defineConfig({
     environment: 'node',
     include: ['lib/**/*.test.ts', 'app/**/*.test.ts', 'components/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/.next/**'],
-    // PR2 ships infrastructure only — first tests land in PR3.
-    // Without this, vitest exits 1 on an empty repo and breaks CI.
-    passWithNoTests: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

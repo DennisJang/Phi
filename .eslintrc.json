@@ -35,6 +35,10 @@
     {
       "files": ["lib/intents/server-batch.ts"],
       "rules": { "no-restricted-imports": "off" }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": { "no-restricted-imports": "off" }
     }
   ]
 }
