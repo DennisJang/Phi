@@ -32,12 +32,13 @@ export type IntentKind =
   | 'leave_shelf'
   | 'import_books';
 
-export type IntentState =
-  | 'queued'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'canceled';
+/**
+ * Intent state values are constrained by the `intents_state_check`
+ * CHECK constraint on the DB side: ('pending', 'running', 'succeeded',
+ * 'failed'). Adding a new state (e.g. 'canceled') requires both a
+ * migration that widens the CHECK and a matching update here.
+ */
+export type IntentState = 'pending' | 'running' | 'succeeded' | 'failed';
 
 export interface Intent {
   id: string;
