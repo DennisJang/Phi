@@ -14,162 +14,127 @@ export type Database = {
   }
   public: {
     Tables: {
-      book_pages: {
+      bookmarks: {
         Row: {
           book_id: string
-          content: Json | null
-          created_at: string | null
-          edit_mode: string | null
+          created_at: string
           id: string
-          template_preset: string | null
-          theme_override: string | null
-          updated_at: string | null
+          updated_at: string
+          user_id: string
+          visitor_country: string | null
         }
         Insert: {
           book_id: string
-          content?: Json | null
-          created_at?: string | null
-          edit_mode?: string | null
+          created_at?: string
           id?: string
-          template_preset?: string | null
-          theme_override?: string | null
-          updated_at?: string | null
+          updated_at?: string
+          user_id: string
+          visitor_country?: string | null
         }
         Update: {
           book_id?: string
-          content?: Json | null
-          created_at?: string | null
-          edit_mode?: string | null
+          created_at?: string
           id?: string
-          template_preset?: string | null
-          theme_override?: string | null
-          updated_at?: string | null
+          updated_at?: string
+          user_id?: string
+          visitor_country?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "book_pages_book_id_fkey"
+            foreignKeyName: "bookmarks_book_id_fkey"
             columns: ["book_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "books"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookmarks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
       books: {
         Row: {
-          added_location: Json | null
-          added_timezone: string | null
-          added_to_shelf_at: string
-          added_weather: Json | null
           author: string | null
-          completed_at: string | null
+          bookmark_count: number
           cover_dominant_color: string | null
-          cover_image_url: string | null
+          cover_sha1: string | null
           cover_source: string | null
-          cover_storage_path: string | null
           created_at: string | null
           deleted_at: string | null
           id: string
-          is_featured: boolean
-          is_section_start: boolean | null
+          intent_id: string | null
           isbn: string | null
           language: string | null
-          memo: string | null
-          metadata: Json | null
-          one_liner: string | null
           published_year: number | null
           publisher: string | null
-          reading_status: string
-          section_label: string | null
-          shelf_id: string
-          shelf_order: number | null
+          section: string
           source: string | null
+          source_id: string | null
           spine_image_url: string | null
           spine_storage_path: string | null
-          started_reading_at: string | null
           title: string
-          total_pages: number | null
           updated_at: string | null
           user_id: string
+          was_cover_fallback: boolean
         }
         Insert: {
-          added_location?: Json | null
-          added_timezone?: string | null
-          added_to_shelf_at?: string
-          added_weather?: Json | null
           author?: string | null
-          completed_at?: string | null
+          bookmark_count?: number
           cover_dominant_color?: string | null
-          cover_image_url?: string | null
+          cover_sha1?: string | null
           cover_source?: string | null
-          cover_storage_path?: string | null
           created_at?: string | null
           deleted_at?: string | null
           id?: string
-          is_featured?: boolean
-          is_section_start?: boolean | null
+          intent_id?: string | null
           isbn?: string | null
           language?: string | null
-          memo?: string | null
-          metadata?: Json | null
-          one_liner?: string | null
           published_year?: number | null
           publisher?: string | null
-          reading_status?: string
-          section_label?: string | null
-          shelf_id: string
-          shelf_order?: number | null
+          section?: string
           source?: string | null
+          source_id?: string | null
           spine_image_url?: string | null
           spine_storage_path?: string | null
-          started_reading_at?: string | null
           title: string
-          total_pages?: number | null
           updated_at?: string | null
           user_id: string
+          was_cover_fallback?: boolean
         }
         Update: {
-          added_location?: Json | null
-          added_timezone?: string | null
-          added_to_shelf_at?: string
-          added_weather?: Json | null
           author?: string | null
-          completed_at?: string | null
+          bookmark_count?: number
           cover_dominant_color?: string | null
-          cover_image_url?: string | null
+          cover_sha1?: string | null
           cover_source?: string | null
-          cover_storage_path?: string | null
           created_at?: string | null
           deleted_at?: string | null
           id?: string
-          is_featured?: boolean
-          is_section_start?: boolean | null
+          intent_id?: string | null
           isbn?: string | null
           language?: string | null
-          memo?: string | null
-          metadata?: Json | null
-          one_liner?: string | null
           published_year?: number | null
           publisher?: string | null
-          reading_status?: string
-          section_label?: string | null
-          shelf_id?: string
-          shelf_order?: number | null
+          section?: string
           source?: string | null
+          source_id?: string | null
           spine_image_url?: string | null
           spine_storage_path?: string | null
-          started_reading_at?: string | null
           title?: string
-          total_pages?: number | null
           updated_at?: string | null
           user_id?: string
+          was_cover_fallback?: boolean
         }
         Relationships: [
           {
-            foreignKeyName: "books_shelf_id_fkey"
-            columns: ["shelf_id"]
+            foreignKeyName: "books_intent_id_fkey"
+            columns: ["intent_id"]
             isOneToOne: false
-            referencedRelation: "shelves"
+            referencedRelation: "intents"
             referencedColumns: ["id"]
           },
           {
@@ -177,459 +142,360 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
+            referencedColumns: ["user_id"]
           },
         ]
       }
       card_exports: {
         Row: {
-          aspect_ratio: string
+          backdrop_country: string | null
           created_at: string
+          deleted_at: string | null
+          format: string
           id: string
-          shelf_id: string | null
-          storage_path: string | null
-          template: string
-          user_id: string
+          image_path: string | null
+          image_sha1: string | null
+          intent_id: string | null
+          owner_id: string
+          selected_book_ids: string[]
+          snapshot_data: Json
         }
         Insert: {
-          aspect_ratio: string
+          backdrop_country?: string | null
           created_at?: string
-          id?: string
-          shelf_id?: string | null
-          storage_path?: string | null
-          template: string
-          user_id: string
+          deleted_at?: string | null
+          format: string
+          id: string
+          image_path?: string | null
+          image_sha1?: string | null
+          intent_id?: string | null
+          owner_id: string
+          selected_book_ids: string[]
+          snapshot_data: Json
         }
         Update: {
-          aspect_ratio?: string
+          backdrop_country?: string | null
           created_at?: string
+          deleted_at?: string | null
+          format?: string
           id?: string
-          shelf_id?: string | null
-          storage_path?: string | null
-          template?: string
-          user_id?: string
+          image_path?: string | null
+          image_sha1?: string | null
+          intent_id?: string | null
+          owner_id?: string
+          selected_book_ids?: string[]
+          snapshot_data?: Json
         }
         Relationships: [
           {
-            foreignKeyName: "card_exports_shelf_id_fkey"
-            columns: ["shelf_id"]
+            foreignKeyName: "card_exports_intent_id_fkey"
+            columns: ["intent_id"]
             isOneToOne: false
-            referencedRelation: "shelves"
+            referencedRelation: "intents"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "card_exports_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "card_exports_owner_id_fkey"
+            columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
+            referencedColumns: ["user_id"]
           },
         ]
       }
-      donation_records: {
+      country_capitals: {
         Row: {
-          created_at: string | null
-          donated_at: string
-          donation_amount_krw: number
-          id: string
-          period_end: string
-          period_start: string
-          receipt_url: string | null
-          recipient_organization: string
-          total_revenue_krw: number
+          capital_name_en: string
+          country_name_en: string
+          created_at: string
+          iso_alpha2: string
+          latitude: number
+          longitude: number
+          source: string
+          source_updated_at: string | null
         }
         Insert: {
-          created_at?: string | null
-          donated_at: string
-          donation_amount_krw: number
-          id?: string
-          period_end: string
-          period_start: string
-          receipt_url?: string | null
-          recipient_organization: string
-          total_revenue_krw: number
+          capital_name_en: string
+          country_name_en: string
+          created_at?: string
+          iso_alpha2: string
+          latitude: number
+          longitude: number
+          source?: string
+          source_updated_at?: string | null
         }
         Update: {
-          created_at?: string | null
-          donated_at?: string
-          donation_amount_krw?: number
-          id?: string
-          period_end?: string
-          period_start?: string
-          receipt_url?: string | null
-          recipient_organization?: string
-          total_revenue_krw?: number
+          capital_name_en?: string
+          country_name_en?: string
+          created_at?: string
+          iso_alpha2?: string
+          latitude?: number
+          longitude?: number
+          source?: string
+          source_updated_at?: string | null
         }
         Relationships: []
       }
       events: {
         Row: {
-          active: boolean
-          bonus: Json
+          actor_country: string | null
+          actor_id: string | null
           created_at: string
-          description: string | null
-          ends_at: string
-          id: string
-          name: string
-          qualifying_action: string
-          slug: string
-          starts_at: string
+          id: number
+          idempotency_key: string | null
+          intent_id: string | null
+          kind: string
+          params: Json | null
+          result: Json | null
+          target_id: string | null
+          target_kind: string | null
+          trigger_source: string | null
         }
         Insert: {
-          active?: boolean
-          bonus: Json
+          actor_country?: string | null
+          actor_id?: string | null
           created_at?: string
-          description?: string | null
-          ends_at: string
-          id?: string
-          name: string
-          qualifying_action: string
-          slug: string
-          starts_at: string
+          id?: number
+          idempotency_key?: string | null
+          intent_id?: string | null
+          kind: string
+          params?: Json | null
+          result?: Json | null
+          target_id?: string | null
+          target_kind?: string | null
+          trigger_source?: string | null
         }
         Update: {
-          active?: boolean
-          bonus?: Json
+          actor_country?: string | null
+          actor_id?: string | null
           created_at?: string
-          description?: string | null
-          ends_at?: string
+          id?: number
+          idempotency_key?: string | null
+          intent_id?: string | null
+          kind?: string
+          params?: Json | null
+          result?: Json | null
+          target_id?: string | null
+          target_kind?: string | null
+          trigger_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_intent_id_fkey"
+            columns: ["intent_id"]
+            isOneToOne: false
+            referencedRelation: "intents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intents: {
+        Row: {
+          actor_id: string
+          completed_at: string | null
+          error: Json | null
+          id: string
+          idempotency_key: string
+          kind: string
+          next_retry_at: string | null
+          params: Json
+          progress: Json
+          result: Json | null
+          retry_count: number
+          started_at: string
+          state: string
+          trigger_source: string | null
+          updated_at: string
+        }
+        Insert: {
+          actor_id: string
+          completed_at?: string | null
+          error?: Json | null
           id?: string
-          name?: string
-          qualifying_action?: string
-          slug?: string
-          starts_at?: string
+          idempotency_key: string
+          kind: string
+          next_retry_at?: string | null
+          params: Json
+          progress?: Json
+          result?: Json | null
+          retry_count?: number
+          started_at?: string
+          state?: string
+          trigger_source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actor_id?: string
+          completed_at?: string | null
+          error?: Json | null
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          next_retry_at?: string | null
+          params?: Json
+          progress?: Json
+          result?: Json | null
+          retry_count?: number
+          started_at?: string
+          state?: string
+          trigger_source?: string | null
+          updated_at?: string
         }
         Relationships: []
-      }
-      follows: {
-        Row: {
-          created_at: string | null
-          follower_id: string
-          following_id: string
-          id: string
-          notifications_enabled: boolean | null
-        }
-        Insert: {
-          created_at?: string | null
-          follower_id: string
-          following_id: string
-          id?: string
-          notifications_enabled?: boolean | null
-        }
-        Update: {
-          created_at?: string | null
-          follower_id?: string
-          following_id?: string
-          id?: string
-          notifications_enabled?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "follows_follower_id_fkey"
-            columns: ["follower_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "follows_following_id_fkey"
-            columns: ["following_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      notifications: {
-        Row: {
-          actor_id: string | null
-          book_id: string | null
-          created_at: string | null
-          id: string
-          read_at: string | null
-          type: string
-          user_id: string
-        }
-        Insert: {
-          actor_id?: string | null
-          book_id?: string | null
-          created_at?: string | null
-          id?: string
-          read_at?: string | null
-          type: string
-          user_id: string
-        }
-        Update: {
-          actor_id?: string | null
-          book_id?: string | null
-          created_at?: string | null
-          id?: string
-          read_at?: string | null
-          type?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notifications_actor_id_fkey"
-            columns: ["actor_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_book_id_fkey"
-            columns: ["book_id"]
-            isOneToOne: false
-            referencedRelation: "books"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       profiles: {
         Row: {
           avatar_url: string | null
+          country: string | null
           created_at: string | null
           display_name: string | null
-          id: string
+          entry_pattern_type: string
+          handle: string | null
+          handle_changed_at: string | null
           language_preference: string | null
-          quota_bonus: Json
-          reading_streak_best: number
-          reading_streak_current: number
-          reading_streak_last_date: string | null
+          launch_grace_until: string | null
+          orphan_marked_at: string | null
           referral_code: string
-          shelf_visibility: string | null
           theme_preference: string | null
           tier: string
+          tier_expires_at: string | null
           tier_source: string
           updated_at: string | null
-          username: string | null
+          user_id: string
         }
         Insert: {
           avatar_url?: string | null
+          country?: string | null
           created_at?: string | null
           display_name?: string | null
-          id: string
+          entry_pattern_type?: string
+          handle?: string | null
+          handle_changed_at?: string | null
           language_preference?: string | null
-          quota_bonus?: Json
-          reading_streak_best?: number
-          reading_streak_current?: number
-          reading_streak_last_date?: string | null
+          launch_grace_until?: string | null
+          orphan_marked_at?: string | null
           referral_code: string
-          shelf_visibility?: string | null
           theme_preference?: string | null
           tier?: string
+          tier_expires_at?: string | null
           tier_source?: string
           updated_at?: string | null
-          username?: string | null
+          user_id: string
         }
         Update: {
           avatar_url?: string | null
+          country?: string | null
           created_at?: string | null
           display_name?: string | null
-          id?: string
+          entry_pattern_type?: string
+          handle?: string | null
+          handle_changed_at?: string | null
           language_preference?: string | null
-          quota_bonus?: Json
-          reading_streak_best?: number
-          reading_streak_current?: number
-          reading_streak_last_date?: string | null
+          launch_grace_until?: string | null
+          orphan_marked_at?: string | null
           referral_code?: string
-          shelf_visibility?: string | null
           theme_preference?: string | null
           tier?: string
+          tier_expires_at?: string | null
           tier_source?: string
           updated_at?: string | null
-          username?: string | null
+          user_id?: string
         }
         Relationships: []
       }
-      public_links: {
+      shelf_affinities: {
         Row: {
           created_at: string
-          expires_at: string | null
           id: string
-          share_id: string
-          target_id: string
-          target_type: string
-          user_id: string
-          view_count: number
-        }
-        Insert: {
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          share_id: string
-          target_id: string
-          target_type: string
-          user_id: string
-          view_count?: number
-        }
-        Update: {
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          share_id?: string
-          target_id?: string
-          target_type?: string
-          user_id?: string
-          view_count?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "public_links_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      referrals: {
-        Row: {
-          applied_at: string
-          id: string
-          referee_id: string
-          referrer_id: string
-          source_card_id: string | null
-        }
-        Insert: {
-          applied_at?: string
-          id?: string
-          referee_id: string
-          referrer_id: string
-          source_card_id?: string | null
-        }
-        Update: {
-          applied_at?: string
-          id?: string
-          referee_id?: string
-          referrer_id?: string
-          source_card_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "referrals_referee_id_fkey"
-            columns: ["referee_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "referrals_referrer_id_fkey"
-            columns: ["referrer_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "referrals_source_card_id_fkey"
-            columns: ["source_card_id"]
-            isOneToOne: false
-            referencedRelation: "card_exports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      saved_books: {
-        Row: {
-          book_id: string
-          created_at: string | null
-          id: string
-          user_id: string
-        }
-        Insert: {
-          book_id: string
-          created_at?: string | null
-          id?: string
-          user_id: string
-        }
-        Update: {
-          book_id?: string
-          created_at?: string | null
-          id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "saved_books_book_id_fkey"
-            columns: ["book_id"]
-            isOneToOne: false
-            referencedRelation: "books"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "saved_books_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      shelves: {
-        Row: {
-          cover_config: Json | null
-          created_at: string
-          description: string | null
-          id: string
-          is_default: boolean
-          kind: string
-          name: string
-          shelf_order: number
-          theme: string
+          owner_user_id: string
           updated_at: string
-          user_id: string
-          visibility: string
+          visitor_country: string | null
+          visitor_user_id: string
         }
         Insert: {
-          cover_config?: Json | null
           created_at?: string
-          description?: string | null
           id?: string
-          is_default?: boolean
-          kind?: string
-          name: string
-          shelf_order?: number
-          theme?: string
+          owner_user_id: string
           updated_at?: string
-          user_id: string
-          visibility?: string
+          visitor_country?: string | null
+          visitor_user_id: string
         }
         Update: {
-          cover_config?: Json | null
           created_at?: string
-          description?: string | null
           id?: string
-          is_default?: boolean
-          kind?: string
-          name?: string
-          shelf_order?: number
-          theme?: string
+          owner_user_id?: string
           updated_at?: string
-          user_id?: string
-          visibility?: string
+          visitor_country?: string | null
+          visitor_user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "shelves_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "shelf_affinities_owner_user_id_fkey"
+            columns: ["owner_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "shelf_affinities_visitor_user_id_fkey"
+            columns: ["visitor_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
+      }
+      tier_limits: {
+        Row: {
+          limit_value: number
+          resource: string
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          limit_value: number
+          resource: string
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          limit_value?: number
+          resource?: string
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
-      [_ in never]: never
+      active_card_image_sha1s: {
+        Row: {
+          image_sha1: string | null
+        }
+        Relationships: []
+      }
+      events_for_owner: {
+        Row: {
+          actor_country: string | null
+          actor_display_name: string | null
+          actor_handle: string | null
+          created_at: string | null
+          id: number | null
+          kind: string | null
+          result: Json | null
+          target_id: string | null
+          target_kind: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      gc_anonymous_users: { Args: never; Returns: Json }
+      gc_deleted_books: { Args: never; Returns: Json }
+      gc_orphan_book_covers: { Args: never; Returns: Json }
+      gc_orphan_card_images: { Args: never; Returns: Json }
+      gc_run_all: { Args: never; Returns: Json }
+      gc_zombie_intents: { Args: never; Returns: Json }
       get_shelf_signal: { Args: { target_user_id: string }; Returns: string }
     }
     Enums: {

@@ -5,33 +5,39 @@
  * lib/supabase/repositories/profileRepository.ts maps from the
  * snake_case DB row shape at the boundary.
  *
- * The primary key in the DB is `id`, which is also the auth.users
- * foreign key. Surfaced here as `userId` for consistency with how
- * UI code refers to identity.
+ * Primary key is `user_id` (DB column), which is also the auth.users
+ * foreign key. Surfaced here as `userId`.
  *
- * See .claude/PROJECT_KNOWLEDGE.md §6 "Monetization" for tier /
- * tierSource / quotaBonus semantics, §5.2 for referralCode.
+ * `handle` is nullable — set explicitly via ChangeHandle intent;
+ * a freshly-created anonymous account has `handle === null` until
+ * the user picks one.
  */
 
-export type ProfileTier = 'free' | 'plus' | 'pro';
+export type ProfileTier = 'free' | 'standard' | 'pro';
 
-export type ProfileTierSource =
-  | 'default'
-  | 'paid'
-  | 'founding'
-  | 'referral'
-  | 'event';
+export type ProfileTierSource = 'free' | 'launch_event' | 'paid_subscription';
 
 export interface Profile {
   userId: string;
 
+  handle: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  country: string | null; // ISO 3166-1 alpha-2
+
   tier: ProfileTier;
   tierSource: ProfileTierSource;
-  quotaBonus: Record<string, unknown>;
+  tierExpiresAt: string | null;
+  launchGraceUntil: string | null;
+
+  entryPatternType: string;
+  orphanMarkedAt: string | null;
+  handleChangedAt: string | null;
 
   referralCode: string;
+  themePreference: string | null;
+  languagePreference: string | null;
 
-  readingStreakCurrent: number;
-  readingStreakLongest: number;
-  readingStreakLastAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }

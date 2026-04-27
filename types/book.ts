@@ -2,20 +2,13 @@
  * Book — domain type for the `books` table.
  *
  * Shape matches the authoritative schema on the Supabase server
- * (see .claude/ARCHITECTURE.md → Database). Column names stay in
+ * (12th migration `phi_2_0_stage_1_foundation`). Column names stay in
  * snake_case to align with the raw DB rows produced by the
  * Supabase adapter in lib/supabase/repositories/bookRepository.ts;
- * the adapter is the only layer that knows they come from Postgres.
+ * the adapter is the single translation boundary.
  *
  * cover_source values are the DB CHECK values — 'aladin_url',
- * 'user_upload', 'typographic_generated'. Phase 2 migration extends
- * this set with 'google_books_url'.
- *
- * Nullability: cover_* and spine_* are nullable at DB level (a book
- * can be inserted before its assets exist), but at render time in
- * BookshelfScene we expect them populated — every add-book path
- * (dev-seed, Aladin, Phase 2 manual) runs the full cover+spine
- * pipeline before INSERT.
+ * 'user_upload', 'typographic_generated'.
  */
 
 export type BookLanguage = 'ko' | 'en';
@@ -27,18 +20,12 @@ export type CoverSource =
 
 export type BookSource = 'aladin_api' | 'manual' | 'google_books';
 
-export type ReadingStatus =
-  | 'interested'
-  | 'owned'
-  | 'reading'
-  | 'completed'
-  | 'abandoned';
+export type BookSection = 'interested' | 'owned' | 'reading';
 
 export interface Book {
   // Identity
   id: string;
   user_id: string;
-  shelf_id: string;
 
   // Content
   title: string;
@@ -46,86 +33,70 @@ export interface Book {
   isbn: string | null;
   publisher: string | null;
   published_year: number | null;
-  total_pages: number | null;
-  language: BookLanguage;
+  language: BookLanguage | null;
 
   // Cover
-  cover_image_url: string | null;
-  cover_storage_path: string | null;
-  cover_dominant_color: string | null;
   cover_source: CoverSource | null;
+  cover_dominant_color: string | null;
+  cover_sha1: string | null;
+  was_cover_fallback: boolean;
+
+  // Derived (not a DB column). Computed by the Supabase adapter from
+  // cover_sha1 + the `covers` bucket path convention so callers can
+  // render without re-deriving the public URL themselves.
+  cover_image_url: string | null;
 
   // Spine
   spine_image_url: string | null;
   spine_storage_path: string | null;
 
-  // Shelf arrangement
-  shelf_order: number | null;
-  section_label: string | null;
-  is_section_start: boolean;
-
-  // Reading state
-  reading_status: ReadingStatus;
-  is_featured: boolean;
-  one_liner: string | null;
-  memo: string | null;
-
-  // Timestamps (ISO strings)
-  added_to_shelf_at: string;
-  started_reading_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-
-  // Contextual capture
-  added_location: Record<string, unknown> | null;
-  added_weather: Record<string, unknown> | null;
-  added_timezone: string | null;
-
-  // Provenance
+  // Section + provenance
+  section: BookSection;
   source: BookSource | null;
-  metadata: Record<string, unknown> | null;
+  source_id: string | null;
+
+  // Async write provenance + denormalized aggregates
+  intent_id: string | null;
+  bookmark_count: number;
+
+  // Timestamps (ISO strings; nullable per DB generator output)
+  created_at: string | null;
+  updated_at: string | null;
+  deleted_at: string | null;
 }
 
 /**
  * Input shape for BookRepository.create.
  *
  * Fields callers provide at add-time. Excludes:
- *   - id, created_at, updated_at, added_to_shelf_at — DB-generated
+ *   - id, created_at, updated_at — DB-generated
  *   - deleted_at — owned by the soft-delete path
- *   - started_reading_at, completed_at — auto-stamped by triggers
+ *   - bookmark_count — denormalized aggregate, owned by bookmark
+ *     INSERT trigger / handler
  *
- * reading_status is optional; omitting it accepts the DB default
- * (`owned`) which matches the Phase 1 default-add flow.
+ * `section` is optional; omitting it accepts the DB default ('owned').
+ * `wasCoverFallback` is optional; omitting it accepts the DB default (false).
  */
 export interface CreateBookInput {
   userId: string;
-  shelfId: string;
 
   title: string;
   author: string | null;
   isbn: string | null;
   publisher: string | null;
   publishedYear: number | null;
-  language: BookLanguage;
+  language: BookLanguage | null;
 
-  coverImageUrl: string | null;
-  coverStoragePath: string | null;
-  coverDominantColor: string | null;
   coverSource: CoverSource | null;
+  coverDominantColor: string | null;
+  coverSha1: string | null;
+  wasCoverFallback?: boolean;
 
   spineImageUrl: string | null;
   spineStoragePath: string | null;
 
-  shelfOrder?: number | null;
-  sectionLabel?: string | null;
-
-  readingStatus?: ReadingStatus;
-  isFeatured?: boolean;
-  oneLiner?: string | null;
-  memo?: string | null;
-
+  section?: BookSection;
   source: BookSource | null;
-  metadata?: Record<string, unknown> | null;
+  sourceId?: string | null;
+  intentId?: string | null;
 }

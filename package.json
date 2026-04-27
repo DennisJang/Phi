@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest",
+    "test:ci": "vitest run --reporter=verbose",
+    "circular-check": "madge --circular --extensions ts,tsx lib/ app/ components/",
+    "gen-types": "echo 'Run via Supabase MCP generate_typescript_types into types/database.ts'"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.97",
@@ -27,12 +31,15 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.169.0",
+    "@vitest/coverage-v8": "^2.1.8",
     "autoprefixer": "^10.4.27",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
+    "madge": "^8.0.0",
     "postcss": "^8.5.8",
     "r3f-perf": "^7.2.3",
     "tailwindcss": "^3.4.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
   }
 }

@@ -217,56 +217,31 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const { data: spineUrlData } = supabase.storage.from(BUCKET).getPublicUrl(spinePath);
 
-  // 11. Resolve the user's default library shelf (insert target) and
-  //     determine next shelf_order. Both go through the repository;
-  //     auth and storage above stay on the direct client.
-  const { books: booksRepo, shelves: shelvesRepo } =
-    await createServerRepositories();
+  // 11. INSERT via repository. Phi 2.0 dropped the shelves table and
+  //     shelf_order column; books are ordered by created_at descending
+  //     and there is no per-shelf containment any more. PR4 will
+  //     replace this route with a thin wrapper around the AddBook
+  //     intent dispatch.
+  const { books: booksRepo } = await createServerRepositories();
 
-  const defaultShelf = await shelvesRepo.findDefaultLibraryByUser(userId);
-  if (!defaultShelf) {
-    return errResponse(
-      500,
-      'default_shelf_missing',
-      'User has no default library shelf; profile trigger may not have run',
-    );
-  }
-
-  // The domain API folds the "append to end" convention inside the
-  // route; a future Step 7 redesign may drop shelf_order for
-  // added_to_shelf_at ordering entirely.
-  const existing = await booksRepo.findByUser(userId);
-  const maxShelfOrder = existing.reduce(
-    (acc, b) => (b.shelf_order !== null && b.shelf_order > acc ? b.shelf_order : acc),
-    -1,
-  );
-  const nextShelfOrder = maxShelfOrder + 1;
-
-  // 12. INSERT via repository
   let inserted;
   try {
     inserted = await booksRepo.create({
       userId,
-      shelfId: defaultShelf.id,
       title: metadata.title,
       author: metadata.author,
       isbn: metadata.isbn,
       publisher: metadata.publisher,
       publishedYear: metadata.publishedYear,
       language: metadata.language,
-      coverImageUrl: coverUrlData.publicUrl,
-      coverStoragePath: coverPath,
-      coverDominantColor: cover.dominantColor,
       coverSource: mapCoverSourceToDb(metadata.source),
+      coverDominantColor: cover.dominantColor,
+      coverSha1: coverHash,
+      wasCoverFallback: false,
       spineImageUrl: spineUrlData.publicUrl,
       spineStoragePath: spinePath,
-      shelfOrder: nextShelfOrder,
       source: mapSourceToDb(metadata.source),
-      // JSONB preserves source-specific fields for Phase 2 dedup + re-fetch.
-      metadata: {
-        sourceItemId: metadata.sourceItemId,
-        sourceLink: metadata.sourceLink,
-      },
+      sourceId: metadata.sourceItemId,
     });
   } catch (err) {
     return errResponse(
@@ -283,7 +258,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       coverUrl: coverUrlData.publicUrl,
       spineUrl: spineUrlData.publicUrl,
       dominantColor: cover.dominantColor,
-      shelfOrder: nextShelfOrder,
     },
   });
 }
